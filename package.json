@@ -1,0 +1,24 @@
+{
+  "name": "agent-service-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workspace for agent runtime packages",
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:backend": "pnpm --filter @hhopkins/agent-runtime build",
+    "build:client": "pnpm --filter @hhopkins/agent-runtime-react build",
+    "check": "pnpm -r check",
+    "clean": "pnpm -r exec rm -rf dist"
+  },
+  "workspaces": [
+    "backend",
+    "client"
+  ],
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  }
+}

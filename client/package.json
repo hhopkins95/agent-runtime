@@ -15,6 +15,17 @@
   "files": [
     "dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hhopkins/agent-service.git",
+    "directory": "client"
+  },
+  "homepage": "https://github.com/hhopkins/agent-service#readme",
+  "bugs": {
+    "url": "https://github.com/hhopkins/agent-service/issues"
+  },
+  "author": "Hunter Hopkins",
+  "license": "MIT",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -26,12 +37,16 @@
     "agent",
     "ai",
     "websocket",
-    "client"
+    "client",
+    "claude",
+    "gemini",
+    "streaming"
   ],
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
+    "@hhopkins/agent-runtime": "workspace:*",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {

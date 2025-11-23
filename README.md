@@ -1,172 +1,178 @@
-# Agent Service
+# Agent Runtime
 
-Standalone Node.js service for running specialized Claude agents in isolated Modal sandboxes.
+A flexible, framework-agnostic runtime for orchestrating AI agents (Claude, Gemini) in isolated sandboxes with real-time streaming support.
 
 ## Overview
 
-The agent service provides:
-- Isolated sandbox execution for Claude agents
-- Session management with complete state persistence
-- MCP tools for Convex backend integration
-- Admin UI integration via HTTP/SSE
+This repository contains two npm packages that work together to provide a complete agent orchestration solution:
+
+- **[@hhopkins/agent-runtime](./backend/)** - Node.js runtime for managing agent sessions, sandboxes, and persistence
+- **[@hhopkins/agent-runtime-react](./client/)** - React hooks for building agent UIs with real-time updates
+
+## Key Features
+
+- 🔒 **Isolated Sandbox Execution** - Run agents in secure Modal sandboxes
+- 🔄 **Real-time Streaming** - WebSocket-based streaming of agent responses
+- 💾 **Flexible Persistence** - Adapter pattern for any database (Convex, PostgreSQL, etc.)
+- 🎯 **Architecture Agnostic** - Support for Claude Agent SDK and Gemini CLI
+- ⚛️ **React Integration** - Complete set of hooks for building agent UIs
+- 📦 **Type-Safe** - Full TypeScript support with shared types
+
+## Installation
+
+### Backend Runtime
+
+```bash
+npm install @hhopkins/agent-runtime
+# or
+pnpm add @hhopkins/agent-runtime
+```
+
+### React Client
+
+```bash
+npm install @hhopkins/agent-runtime-react
+# or
+pnpm add @hhopkins/agent-runtime-react
+```
+
+## Quick Start
+
+### 1. Set Up the Runtime (Backend)
+
+The runtime requires you to provide adapters for persistence and configuration:
+
+```typescript
+import { AgentRuntime } from '@hhopkins/agent-runtime';
+import type { PersistenceAdapter, RuntimeConfig } from '@hhopkins/agent-runtime/types';
+
+// Implement your persistence adapter
+const persistenceAdapter: PersistenceAdapter = {
+  async listAllSessions() { /* ... */ },
+  async loadSession(sessionId) { /* ... */ },
+  async createSessionRecord(data) { /* ... */ },
+  async updateSession(sessionId, updates) { /* ... */ },
+  // ... other methods
+};
+
+// Configure the runtime
+const config: RuntimeConfig = {
+  modal: {
+    tokenId: process.env.MODAL_TOKEN_ID,
+    tokenSecret: process.env.MODAL_TOKEN_SECRET,
+  },
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  persistence: persistenceAdapter,
+  port: 3000,
+};
+
+// Start the runtime
+const runtime = new AgentRuntime(config);
+await runtime.start();
+```
+
+See [backend/README.md](./backend/README.md) for detailed runtime documentation.
+
+### 2. Build the UI (React)
+
+Use the React hooks to connect to your runtime:
+
+```typescript
+import { AgentServiceProvider, useAgentSession, useMessages } from '@hhopkins/agent-runtime-react';
+
+function App() {
+  return (
+    <AgentServiceProvider config={{
+      apiUrl: 'http://localhost:3000',
+      wsUrl: 'ws://localhost:3000',
+      apiKey: 'your-api-key',
+    }}>
+      <AgentChat />
+    </AgentServiceProvider>
+  );
+}
+
+function AgentChat() {
+  const { session, createSession, sendMessage } = useAgentSession();
+  const { messages } = useMessages(session?.sessionId);
+
+  // Build your UI...
+}
+```
+
+See [client/README.md](./client/README.md) for detailed React hooks documentation.
 
 ## Architecture
 
 ```
-Node.js Server (Railway/Fly.io)
-  ↓
-  ├─→ Modal Sandboxes API (agent execution)
-  └─→ Convex Backend (state persistence)
+┌─────────────────────────────────────────┐
+│         Your Application                │
+│  (React, Next.js, Express, etc.)        │
+└────────────┬────────────────────────────┘
+             │
+             │ HTTP/WebSocket
+             ↓
+┌─────────────────────────────────────────┐
+│    @hhopkins/agent-runtime (Backend)    │
+│  • Session management                   │
+│  • WebSocket streaming                  │
+│  • Adapter integration                  │
+└────────────┬────────────────────────────┘
+             │
+             ├──→ Modal Sandboxes (Agent execution)
+             ├──→ Your Persistence Layer (via adapter)
+             └──→ Your Custom Logic (via adapters)
 ```
 
-## Development
+## Important: You Provide the Infrastructure
 
-### Prerequisites
+This library is a **runtime and client**, not a complete service. Your application must provide:
 
-- Node.js >= 22 (required by Modal SDK)
-- pnpm
-- Modal account (for sandboxes)
-- Anthropic API key
+- ✅ **Persistence Layer** - Implement `PersistenceAdapter` for your database (Convex, PostgreSQL, MongoDB, etc.)
+- ✅ **Modal Account** - For sandbox orchestration ([Modal.com](https://modal.com))
+- ✅ **API Keys** - Anthropic API key for Claude agents
+- ✅ **Server Deployment** - Host the runtime on your infrastructure (Railway, Fly.io, AWS, etc.)
+- ✅ **Authentication** - Add your own auth layer (JWT, OAuth, etc.)
 
-### Setup
-
-```bash
-# Install dependencies
-cd apps/agent-service
-pnpm install
-
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your credentials
-# (See .env.example for required variables)
-
-# Start development server
-pnpm dev
-```
-
-Server will start on `http://localhost:3003`
-
-### Testing
-
-**Story 1.1 & 1.2 - Basic Testing:**
-
-```bash
-# Health check
-curl http://localhost:3003/health
-
-# Server status (includes active session count)
-curl http://localhost:3003/
-
-# Create a test session
-curl -X POST http://localhost:3003/sandbox-test/create \
-  -H "Content-Type: application/json" \
-  -d '{"agentType":"test-agent","marketKey":"clt"}'
-
-# List all active sessions
-curl http://localhost:3003/sandbox-test
-
-# Get session details
-curl http://localhost:3003/sandbox-test/{sessionId}
-
-# Destroy a session
-curl -X DELETE http://localhost:3003/sandbox-test/{sessionId}
-```
-
-**Note**: Sandbox execution uses Modal SDK with custom image containing Agent SDK and executor script.
-
-### Build
-
-```bash
-# Type check
-pnpm check-types
-
-# Lint
-pnpm lint
-
-# Build for production
-pnpm build
-
-# Run production build
-pnpm start
-```
+See the [backend README](./backend/README.md) for a complete guide on implementing adapters.
 
 ## Project Structure
 
 ```
-apps/agent-service/
-├── src/
-│   ├── index.ts                    # Server entry point with SessionManager
-│   ├── env.ts                      # Environment validation (Zod)
-│   ├── types/
-│   │   └── index.ts                # Session and sandbox types
-│   ├── lib/
-│   │   ├── logger.ts               # Pino logger setup
-│   │   ├── modal.ts                # Modal client + buildSandboxImageCommands()
-│   │   ├── session-manager.ts      # Session lifecycle management
-│   │   ├── session-file-manager.ts # Sandbox filesystem setup
-│   │   └── agent-sdk.ts            # Agent SDK execution service
-│   └── routes/
-│       ├── health.ts               # Health check endpoint
-│       └── test.ts                 # Testing routes (temporary)
-├── sandbox/                        # Files baked into Modal image at /app/
-│   ├── package.json                # Dependencies for SDK executor
-│   ├── execute-sdk-query.ts        # Agent SDK executor script
-│   └── README.md                   # Documentation
-├── agent-configs/                  # Agent configuration templates
-│   └── event-researcher/           # Event researcher agent config
-├── package.json
-├── tsconfig.json
-└── .env.example
+agent-service/
+├── backend/          # @hhopkins/agent-runtime
+│   ├── src/
+│   │   ├── core/     # Session management, event bus
+│   │   ├── types/    # Shared type definitions
+│   │   ├── transport/ # HTTP + WebSocket servers
+│   │   └── lib/      # Agent architectures, utilities
+│   └── sandbox/      # Modal sandbox configuration
+│
+├── client/           # @hhopkins/agent-runtime-react
+│   ├── src/
+│   │   ├── hooks/    # React hooks (useAgentSession, etc.)
+│   │   ├── context/  # Provider and state management
+│   │   └── client/   # REST + WebSocket clients
+│   └── dist/         # Built output
+│
+└── README.md         # This file
 ```
 
-## Current Status
+## Documentation
 
-**Phase 1 Progress: 6/7 stories complete**
+- **[Backend Runtime Documentation](./backend/README.md)** - Runtime setup, adapters, configuration
+- **[React Client Documentation](./client/README.md)** - Hooks API, examples, troubleshooting
 
-**Completed Stories:**
-- ✅ Story 1.1: Project setup with Hono server
-- ✅ Story 1.2: Sandbox lifecycle management with Modal SDK
-- ✅ Story 1.3: Dynamic .claude directory building
-- ✅ Story 1.4: Agent SDK integration with streaming JSONL
-- ✅ Story 1.5: MCP tools for Convex integration
-- ✅ Story 1.6: Core HTTP routes with SSE streaming
+## Requirements
 
-**Key Architecture Improvements:**
-- `buildSandboxImageCommands()` - Recursively copies `sandbox/` → `/app/` in Modal image
-- All dependencies baked into image at build time (fully cached)
-- Clean separation: `/app` for application code, `/workspace` for SDK operations
-- MCP tools with typed Convex client for backend integration
-- Custom agents API in backend with AGENT_TD_KEY authentication
-- Production HTTP API with 5 routes and SSE streaming for messages
-- Agent service as single entry point (Convex = persistence only)
-- Derived session status (active/inactive) based on activeSessions Map
+- Node.js >= 18
+- TypeScript >= 5.0 (recommended)
+- React >= 18.0 (for client package)
 
-**Next**: Story 1.7 - File sync implementation
+## License
 
-## Environment Variables
+MIT
 
-See `.env.example` for all configuration options.
+## Contributing
 
-**Required:**
-- `PORT` - Server port (default: 3003)
-- `NODE_ENV` - Environment (development/production)
-- `LOG_LEVEL` - Logging level (info/debug/error)
-- `MODAL_TOKEN_ID` - Modal account token ID
-- `MODAL_TOKEN_SECRET` - Modal account token secret
-- `ANTHROPIC_API_KEY` - Anthropic API key for Agent SDK
-- `CONVEX_URL` - Convex deployment URL (e.g., https://your-deployment.convex.cloud)
-- `AGENT_TD_KEY` - Shared secret for agent service ↔ backend authentication
-
-## Related Documentation
-
-### Architecture
-- **[AgentSandbox Architecture](./docs/architecture/agent-sandbox.md)** - Unified sandbox wrapper with health monitoring
-- [Event Bus Pattern](./docs/architecture/event-bus-pattern.md) - Event-driven architecture
-- [Design Document](./docs/DESIGN.md) - Generic runtime design
-- [Refactoring Progress](./REFACTORING_PROGRESS.md) - Current refactoring status
-
-### Product
-- [Initiative Overview](../../docs/content/workspace/initiatives/agent-service/overview.md)
-- [PRD](../../docs/content/workspace/initiatives/agent-service/prd.md)
-- [Epic Breakdown](../../docs/content/workspace/initiatives/agent-service/epic.md)
+Issues and pull requests are welcome! Please see individual package READMEs for development setup.

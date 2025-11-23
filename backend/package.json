@@ -1,17 +1,53 @@
 {
   "name": "@hhopkins/agent-runtime",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Node.js runtime for orchestrating AI agents (Claude, Gemini) in isolated Modal sandboxes",
   "type": "module",
+  "main": "./dist/runtime.js",
+  "module": "./dist/runtime.js",
+  "types": "./dist/runtime.d.ts",
   "exports": {
-    "./types": "./src/types/index.ts"
+    ".": {
+      "import": "./dist/runtime.js",
+      "types": "./dist/runtime.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types/index.js",
+      "types": "./dist/types/index.d.ts"
+    }
   },
+  "files": [
+    "dist",
+    "sandbox",
+    "README.md"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "claude",
+    "gemini",
+    "modal",
+    "runtime",
+    "sandbox",
+    "websocket",
+    "streaming",
+    "anthropic"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hhopkins/agent-service.git",
+    "directory": "backend"
+  },
+  "homepage": "https://github.com/hhopkins/agent-service#readme",
+  "bugs": {
+    "url": "https://github.com/hhopkins/agent-service/issues"
+  },
+  "author": "Hunter Hopkins",
+  "license": "MIT",
   "scripts": {
-    "dev": "tsx watch ticketdrop/index.ts",
     "build": "tsc",
-    "start": "node dist/ticketdrop/index.js",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "check-types": "tsc --noEmit",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "check": "pnpm run check-types && pnpm run lint"
   },
   "dependencies": {
@@ -19,7 +55,6 @@
     "@hono/node-server": "^1.14.2",
     "chokidar": "^4.0.3",
     "commander": "^14.0.0",
-    "convex": "^1.29.0",
     "dotenv": "^17.2.2",
     "hono": "^4.7.11",
     "modal": "^0.5.4",

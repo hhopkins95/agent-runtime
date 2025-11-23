@@ -1,6 +1,6 @@
-# @agent-service/react-client
+# @hhopkins/agent-runtime-react
 
-React hooks and client library for interacting with agent-service instances. Provides type-safe, real-time access to AI agent sessions with support for message streaming, file tracking, and subagent conversations.
+React hooks and client library for connecting to [@hhopkins/agent-runtime](../backend/). Provides type-safe, real-time access to AI agent sessions with support for message streaming, file tracking, and subagent conversations.
 
 ## Features
 
@@ -17,19 +17,19 @@ React hooks and client library for interacting with agent-service instances. Pro
 ## Installation
 
 ```bash
-npm install @agent-service/react-client
+npm install @hhopkins/agent-runtime-react
 # or
-pnpm add @agent-service/react-client
-# or
-yarn add @agent-service/react-client
+pnpm add @hhopkins/agent-runtime-react
 ```
+
+**Note:** This package depends on `@hhopkins/agent-runtime` for type definitions. The runtime package is automatically installed as a dependency.
 
 ## Quick Start
 
 ### 1. Wrap your app with the provider
 
 ```tsx
-import { AgentServiceProvider } from '@agent-service/react-client';
+import { AgentServiceProvider } from '@hhopkins/agent-runtime-react';
 
 function App() {
   return (
@@ -52,7 +52,7 @@ import {
   useAgentSession,
   useMessages,
   useWorkspaceFiles,
-} from '@agent-service/react-client';
+} from '@hhopkins/agent-runtime-react';
 
 function ChatInterface() {
   const { session, createSession, destroySession } = useAgentSession();
@@ -384,7 +384,7 @@ type AGENT_ARCHITECTURE_TYPE = "claude-agent-sdk" | "gemini-cli";
 Use type guards to narrow block types:
 
 ```tsx
-import { isAssistantTextBlock, isToolUseBlock } from '@agent-service/react-client';
+import { isAssistantTextBlock, isToolUseBlock } from '@hhopkins/agent-runtime-react';
 
 function BlockRenderer({ block }: { block: ConversationBlock }) {
   if (isAssistantTextBlock(block)) {
@@ -409,7 +409,7 @@ For advanced use cases, you can access the REST client directly:
 
 ```tsx
 import { useContext } from 'react';
-import { AgentServiceContext } from '@agent-service/react-client';
+import { AgentServiceContext } from '@hhopkins/agent-runtime-react';
 
 function CustomComponent() {
   const context = useContext(AgentServiceContext);
@@ -430,7 +430,7 @@ Listen to raw WebSocket events:
 
 ```tsx
 import { useContext, useEffect } from 'react';
-import { AgentServiceContext } from '@agent-service/react-client';
+import { AgentServiceContext } from '@hhopkins/agent-runtime-react';
 
 function EventMonitor() {
   const context = useContext(AgentServiceContext);
@@ -466,7 +466,7 @@ import {
   isAssistantTextBlock,
   isUserMessageBlock,
   isToolUseBlock,
-} from '@agent-service/react-client';
+} from '@hhopkins/agent-runtime-react';
 
 function App() {
   return (
