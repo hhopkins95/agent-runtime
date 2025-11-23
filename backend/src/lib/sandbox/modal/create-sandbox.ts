@@ -138,10 +138,7 @@ export async function createModalSandbox(
 
 
     logger.info({
-      anthropicApiKey: env.ANTHROPIC_API_KEY,
       claudeCodeCwd: workdir,
-      convexUrl: env.CONVEX_URL,
-      agentTdKey: env.AGENT_TD_KEY,
     })
 
     // Create sandbox with configuration
@@ -151,8 +148,6 @@ export async function createModalSandbox(
       env: {
         ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
         CLAUDE_CODE_CWD: workdir,
-        CONVEX_URL: env.CONVEX_URL,
-        AGENT_TD_KEY: env.AGENT_TD_KEY,
       },
     });
 

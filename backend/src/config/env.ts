@@ -18,9 +18,6 @@ const envSchema = z.object({
   // Story 1.4: Agent SDK
   ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
 
-  // Story 1.5: Convex Integration
-  CONVEX_URL: z.string().url('CONVEX_URL must be a valid URL'),
-  AGENT_TD_KEY: z.string().min(1, 'AGENT_TD_KEY is required'),
 });
 
 export type Env = z.infer<typeof envSchema>;
