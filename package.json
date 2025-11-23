@@ -8,11 +8,16 @@
     "build:backend": "pnpm --filter @hhopkins/agent-runtime build",
     "build:client": "pnpm --filter @hhopkins/agent-runtime-react build",
     "check": "pnpm -r check",
-    "clean": "pnpm -r exec rm -rf dist"
+    "clean": "pnpm -r exec rm -rf dist",
+    "example:backend": "pnpm --filter @example/backend dev",
+    "example:frontend": "pnpm --filter @example/frontend dev",
+    "example:dev": "pnpm run example:backend & pnpm run example:frontend"
   },
   "workspaces": [
     "backend",
-    "client"
+    "client",
+    "example/backend",
+    "example/frontend"
   ],
   "devDependencies": {
     "typescript": "^5.7.2"
