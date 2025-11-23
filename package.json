@@ -13,8 +13,7 @@
     "dev:client": "pnpm --filter @hhopkins/agent-runtime-react dev",
     "example:backend": "pnpm --filter @example/backend dev",
     "example:frontend": "pnpm --filter @example/frontend dev",
-    "dev": "concurrently --names \"backend,client,ex-backend,ex-frontend\" --prefix-colors \"blue,magenta,green,cyan\" \"pnpm dev:backend\" \"pnpm dev:client\" \"pnpm example:backend\" \"pnpm example:frontend\"",
-    "example:dev": "pnpm run example:backend & pnpm run example:frontend"
+    "dev": "concurrently --names \"backend,client,ex-backend,ex-frontend\" --prefix-colors \"blue,magenta,green,cyan\" \"pnpm dev:backend\" \"pnpm dev:client\" \"pnpm example:backend\" \"pnpm example:frontend\""
   },
   "workspaces": [
     "backend",
