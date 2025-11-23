@@ -10,27 +10,20 @@
  * providing a single cohesive interface for all sandbox operations.
  */
 
-import type {
-  SDKMessage
-} from '@anthropic-ai/claude-agent-sdk';
-import type { Sandbox } from 'modal';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../config/logger.js';
-import { ModalContext } from '../lib/sandbox/modal/client.js';
-import { createModalSandbox } from '../lib/sandbox/modal/create-sandbox.js';
-import { AgentProfile } from '../types/agent-profiles.js';
-import { SavedSessionData, WorkspaceFile } from '../types/session/index.js';
-import { AGENT_ARCHITECTURE_TYPE } from '../types/session/index.js';
 import { AgentArchitectureAdapter } from '../lib/agent-architectures/base.js';
+import { ModalContext } from '../lib/sandbox/modal/client.js';
+import { AgentProfile } from '../types/agent-profiles.js';
+import { AGENT_ARCHITECTURE_TYPE, SavedSessionData, WorkspaceFile } from '../types/session/index.js';
 
-import { ContainerProcess } from 'modal';
+import { getAgentArchitectureAdapter } from '../lib/agent-architectures/factory.js';
+import { streamJSONL } from '../lib/helpers/stream.js';
 import { SandboxPrimitive } from '../lib/sandbox/base.js';
 import { createSandbox } from '../lib/sandbox/factory.js';
-import { getAgentArchitectureAdapter } from '../lib/agent-architectures/factory.js';
-import { StreamEvent } from '../types/session/streamEvents.js';
-import { streamJSONL } from '../lib/helpers/stream.js';
 import { ConversationBlock } from '../types/session/blocks.js';
+import { StreamEvent } from '../types/session/streamEvents.js';
 
 
 const GEMINI_PROJECT_HASH = "TODO_GET_PROJECT_HASH"
