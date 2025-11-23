@@ -27,8 +27,8 @@
   "author": "Hunter Hopkins",
   "license": "MIT",
   "scripts": {
-    "build": "tsdown",
-    "dev": "tsdown --watch",
+    "build": "tsc",
+    "dev": "tsc --watch",
     "type-check": "tsc --noEmit"
   },
   "keywords": [
