@@ -11,9 +11,9 @@ import { BACKEND_URL, API_KEY } from "@/lib/constants";
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <AgentServiceProvider
-      baseUrl={BACKEND_URL}
+      apiUrl={BACKEND_URL}
+      wsUrl={BACKEND_URL}
       apiKey={API_KEY}
-      autoConnect={true}
     >
       {children}
     </AgentServiceProvider>

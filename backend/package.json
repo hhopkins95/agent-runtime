@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "description": "Node.js runtime for orchestrating AI agents (Claude, Gemini) in isolated Modal sandboxes",
   "type": "module",
-  "main": "./dist/runtime.js",
-  "module": "./dist/runtime.js",
-  "types": "./dist/runtime.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/runtime.js",
-      "types": "./dist/runtime.d.ts"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     },
     "./types": {
       "import": "./dist/types/index.js",

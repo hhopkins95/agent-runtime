@@ -31,8 +31,18 @@ export type {
   SessionStatus,
   WorkspaceFile,
   SessionListData,
+  SavedSessionData,
   RuntimeSessionData,
 } from './session';
+
+// ============================================================================
+// Agent Profile Types
+// ============================================================================
+
+export type {
+  AgentProfileListData,
+  AgentProfile,
+} from './agent-profiles';
 
 // ============================================================================
 // Block Types (Conversation Elements)

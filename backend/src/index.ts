@@ -35,6 +35,21 @@ export type {
   // Adapter interfaces
   PersistenceAdapter,
 
+  // Session types
+  SessionListData,
+  SavedSessionData,
+  RuntimeSessionData,
+  WorkspaceFile,
+  AGENT_ARCHITECTURE_TYPE,
+  SessionStatus,
+
+  // Agent profile types
+  AgentProfile,
+  AgentProfileListData,
+
+  // Block types
+  ConversationBlock,
+
   // Event types
   ServerToClientEvents,
   ClientToServerEvents,

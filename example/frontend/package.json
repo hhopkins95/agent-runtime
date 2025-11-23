@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "@hhopkins/agent-runtime-react": "workspace:*",
+    "next": "^15.1.4",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "next": "^15.1.4"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.19.1",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "autoprefixer": "^10.4.20",

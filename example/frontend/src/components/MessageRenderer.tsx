@@ -1,4 +1,4 @@
-import type { ConversationBlock } from "@hhopkins/agent-runtime";
+import type { ConversationBlock } from "@hhopkins/agent-runtime-react";
 
 /**
  * Renders different types of conversation blocks
