@@ -5,7 +5,7 @@ import type {
   WorkspaceFile,
   AgentProfile,
   AgentProfileListData,
-} from "@hhopkins/agent-runtime";
+} from "@hhopkins/agent-runtime/types";
 
 /**
  * In-memory implementation of PersistenceAdapter for development/demo purposes.

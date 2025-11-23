@@ -1,5 +1,4 @@
 import { createServer } from "http";
-import { serve } from "@hono/node-server";
 import { createAgentRuntime } from "@hhopkins/agent-runtime";
 import dotenv from "dotenv";
 import { InMemoryPersistenceAdapter } from "./persistence/in-memory-adapter.js";
