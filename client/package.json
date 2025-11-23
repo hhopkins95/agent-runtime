@@ -27,8 +27,8 @@
   "author": "Hunter Hopkins",
   "license": "MIT",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "type-check": "tsc --noEmit"
   },
   "keywords": [
@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@types/react": "^18.3.0",
+    "tsdown": "^0.16.6",
     "typescript": "^5.7.2"
   }
 }

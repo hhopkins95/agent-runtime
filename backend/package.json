@@ -45,7 +45,8 @@
   "author": "Hunter Hopkins",
   "license": "MIT",
   "scripts": {
-    "build": "tsc",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "check-types": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "check": "pnpm run check-types && pnpm run lint"
@@ -69,6 +70,7 @@
     "@typescript-eslint/eslint-plugin": "^6.7.0",
     "@typescript-eslint/parser": "^6.7.0",
     "eslint": "^8.49.0",
+    "tsdown": "^0.16.6",
     "tsx": "^4.19.2",
     "typescript": "^5.2.2"
   }
