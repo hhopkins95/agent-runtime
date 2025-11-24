@@ -13,7 +13,8 @@
     "dev:client": "pnpm --filter @hhopkins/agent-runtime-react dev",
     "example:backend": "pnpm --filter @example/backend dev",
     "example:frontend": "pnpm --filter @example/frontend dev",
-    "dev": "concurrently --names \"backend,client,ex-backend,ex-frontend\" --prefix-colors \"blue,magenta,green,cyan\" \"pnpm dev:backend\" \"pnpm dev:client\" \"wait-on backend/dist/index.js client/dist/index.js && pnpm example:backend\" \"wait-on backend/dist/index.js client/dist/index.js && pnpm example:frontend\""
+    "dev": "concurrently --names \"backend,client,ex-backend,ex-frontend\" --prefix-colors \"blue,magenta,green,cyan\" \"pnpm dev:backend\" \"pnpm dev:client\" \"wait-on backend/dist/index.js client/dist/index.js && pnpm example:backend\" \"wait-on backend/dist/index.js client/dist/index.js && pnpm example:frontend\"",
+    "docs" : "npx @hhopkins/smart-docs ./docs"
   },
   "workspaces": [
     "backend",
