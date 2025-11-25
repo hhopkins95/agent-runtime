@@ -51,6 +51,26 @@ async function main() {
 
     // Create HTTP server
     const httpServer = createServer(async (req, res) => {
+      // Debug endpoint - returns raw server state
+      if (req.url === '/debug' && req.method === 'GET') {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        const activeSessions = runtime.sessionManager.getActiveSessions();
+        const debugData = {
+          timestamp: Date.now(),
+          activeSessionCount: activeSessions.length,
+          sessions: activeSessions.map(session => ({
+            sessionId: session.sessionId,
+            state: session.getState(),
+          })),
+        };
+
+        res.statusCode = 200;
+        res.end(JSON.stringify(debugData, null, 2));
+        return;
+      }
+
       // Use Hono's fetch handler
       const response = await restApp.fetch(
         new Request(`http://${req.headers.host}${req.url}`, {
@@ -92,7 +112,8 @@ async function main() {
       console.log(`  DELETE /sessions/:id`);
       console.log(`  GET    /sessions`);
       console.log(`  GET    /agent-profiles`);
-      console.log(`  GET    /health\n`);
+      console.log(`  GET    /health`);
+      console.log(`  GET    /debug (raw server state)\n`);
     });
 
     // Graceful shutdown

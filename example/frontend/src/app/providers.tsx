@@ -14,6 +14,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       apiUrl={BACKEND_URL}
       wsUrl={BACKEND_URL}
       apiKey={API_KEY}
+      debug={true}
     >
       {children}
     </AgentServiceProvider>

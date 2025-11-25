@@ -5,6 +5,7 @@ import { SessionList } from "@/components/SessionList";
 import { AgentChat } from "@/components/AgentChat";
 import { FileWorkspace } from "@/components/FileWorkspace";
 import { SubagentViewer } from "@/components/SubagentViewer";
+import { DebugPanel } from "@/components/DebugPanel";
 
 /**
  * Main dashboard page
@@ -108,6 +109,9 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+
+      {/* Debug Panel */}
+      <DebugPanel />
 
       {/* Footer */}
       <footer className="fixed bottom-0 left-0 right-0 bg-white border-t py-2">

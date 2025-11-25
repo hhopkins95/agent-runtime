@@ -88,13 +88,22 @@ export function AgentServiceProvider({
 
   // Set up WebSocket event listeners
   useEffect(() => {
+    // Helper to log events when debug mode is enabled
+    const logEvent = (event: string, data: unknown) => {
+      if (debug) {
+        console.log(`[WS Event] ${event}`, data);
+      }
+    };
+
     // Global Events
     wsManager.on('sessions:list', (sessions) => {
+      logEvent('sessions:list', { count: sessions.length });
       dispatch({ type: 'SESSIONS_LIST_UPDATED', sessions });
     });
 
     // Block Streaming Events
     wsManager.on('session:block:start', (data) => {
+      logEvent('session:block:start', data);
       dispatch({
         type: 'BLOCK_STARTED',
         sessionId: data.sessionId,
@@ -104,6 +113,10 @@ export function AgentServiceProvider({
     });
 
     wsManager.on('session:block:delta', (data) => {
+      // Don't log full delta to avoid spam, just note it happened
+      if (debug) {
+        console.log(`[WS Event] session:block:delta (blockId: ${data.blockId}, +${data.delta.length} chars)`);
+      }
       dispatch({
         type: 'BLOCK_DELTA',
         sessionId: data.sessionId,
@@ -114,6 +127,7 @@ export function AgentServiceProvider({
     });
 
     wsManager.on('session:block:update', (data) => {
+      logEvent('session:block:update', data);
       dispatch({
         type: 'BLOCK_UPDATED',
         sessionId: data.sessionId,
@@ -124,6 +138,7 @@ export function AgentServiceProvider({
     });
 
     wsManager.on('session:block:complete', (data) => {
+      logEvent('session:block:complete', data);
       dispatch({
         type: 'BLOCK_COMPLETED',
         sessionId: data.sessionId,
@@ -134,6 +149,7 @@ export function AgentServiceProvider({
     });
 
     wsManager.on('session:metadata:update', (data) => {
+      logEvent('session:metadata:update', data);
       dispatch({
         type: 'METADATA_UPDATED',
         sessionId: data.sessionId,
@@ -144,6 +160,7 @@ export function AgentServiceProvider({
 
     // Subagent Events
     wsManager.on('session:subagent:discovered', (data) => {
+      logEvent('session:subagent:discovered', data);
       dispatch({
         type: 'SUBAGENT_DISCOVERED',
         sessionId: data.sessionId,
@@ -152,6 +169,7 @@ export function AgentServiceProvider({
     });
 
     wsManager.on('session:subagent:completed', (data) => {
+      logEvent('session:subagent:completed', data);
       dispatch({
         type: 'SUBAGENT_COMPLETED',
         sessionId: data.sessionId,
@@ -162,6 +180,7 @@ export function AgentServiceProvider({
 
     // File Events
     wsManager.on('session:file:created', (data) => {
+      logEvent('session:file:created', data);
       dispatch({
         type: 'FILE_CREATED',
         sessionId: data.sessionId,
@@ -170,6 +189,7 @@ export function AgentServiceProvider({
     });
 
     wsManager.on('session:file:modified', (data) => {
+      logEvent('session:file:modified', data);
       dispatch({
         type: 'FILE_MODIFIED',
         sessionId: data.sessionId,
@@ -178,6 +198,7 @@ export function AgentServiceProvider({
     });
 
     wsManager.on('session:file:deleted', (data) => {
+      logEvent('session:file:deleted', data);
       dispatch({
         type: 'FILE_DELETED',
         sessionId: data.sessionId,
@@ -187,6 +208,7 @@ export function AgentServiceProvider({
 
     // Session Status Events
     wsManager.on('session:status', (data) => {
+      logEvent('session:status', data);
       dispatch({
         type: 'SESSION_STATUS_CHANGED',
         sessionId: data.sessionId,
@@ -203,7 +225,7 @@ export function AgentServiceProvider({
     return () => {
       wsManager.removeAllListeners();
     };
-  }, [wsManager]);
+  }, [wsManager, debug]);
 
   const contextValue = {
     state,
