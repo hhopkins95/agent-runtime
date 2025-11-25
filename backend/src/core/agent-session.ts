@@ -203,7 +203,11 @@ export class AgentSession {
   }): Promise<void> {
 
     // Create the sandbox
-    this.status = "building-sandbox"
+    this.status = "building-sandbox";
+    this.eventBus.emit('session:status', {
+      sessionId: this.sessionId,
+      status: 'building-sandbox',
+    });
     if ('newSessionId' in session) {
       this.sandbox = await AgentSandbox.create({
         agentProfile: this.agentProfile,

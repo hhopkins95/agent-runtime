@@ -46,10 +46,18 @@ export function setupSessionLifecycleHandlers(
       socket.join(`session:${sessionId}`);
       socket.data.sessionId = sessionId;
 
+      // Send current status immediately so client has correct state
+      const state = session.getState();
+      socket.emit('session:status', {
+        sessionId,
+        status: state.status,
+      });
+
       logger.info(
         {
           socketId: socket.id,
           sessionId,
+          status: state.status,
         },
         'Client joined session room'
       );

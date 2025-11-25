@@ -54,12 +54,12 @@ export interface DomainEvents {
   };
 
   /**
-   * Session status changed (active/inactive)
+   * Session status changed
    * Emitted by: AgentSession
    */
   'session:status': {
     sessionId: string;
-    status: 'active' | 'inactive';
+    status: 'pending' | 'building-sandbox' | 'active' | 'inactive';
   };
 
   /**
