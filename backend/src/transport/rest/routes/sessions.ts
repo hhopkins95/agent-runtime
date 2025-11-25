@@ -93,21 +93,32 @@ export function createSessionRoutes(
   .get("/:id", async (c) => {
     const sessionId = c.req.param("id");
 
-    const session = sessionManager.getSession(sessionId);
-    if (!session) {
-      throw new HTTPException(404, {
-        message: JSON.stringify(
-          errorResponse("Session not found", "SESSION_NOT_FOUND")
-        ),
-      });
-    }
-
     try {
+      // First check if session is already active
+      let session = sessionManager.getSession(sessionId);
+
+      // If not active, try to load from persistence
+      if (!session) {
+        try {
+          session = await sessionManager.loadSession(sessionId);
+        } catch {
+          // Session doesn't exist in persistence either
+          throw new HTTPException(404, {
+            message: JSON.stringify(
+              errorResponse("Session not found", "SESSION_NOT_FOUND")
+            ),
+          });
+        }
+      }
+
       // Get full session data including transcript, files, subagents
       const sessionData = session.getState();
 
       return c.json(sessionData);
     } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
       throw new HTTPException(500, {
         message: JSON.stringify(
           errorResponse(

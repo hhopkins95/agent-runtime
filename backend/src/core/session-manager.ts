@@ -120,6 +120,9 @@ export class SessionManager {
       // Add to active sessions
       this.activeSessions.set(session.sessionId, session);
 
+      // Persist session record
+      await this.adapters.persistence.createSessionRecord(session.getListData());
+
       logger.info(
         { sessionId: session.sessionId, activeCount: this.activeSessions.size },
         'Session created successfully'

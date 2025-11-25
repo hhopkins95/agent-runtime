@@ -238,6 +238,12 @@ export class AgentSession {
     this.startPeriodicSync()
     this.startHealthMonitoring()
 
+    // Transition to active status and notify clients
+    this.status = 'active';
+    this.eventBus.emit('session:status', {
+      sessionId: this.sessionId,
+      status: 'active',
+    });
   }
 
   private async reloadSandbox(): Promise<void> {
