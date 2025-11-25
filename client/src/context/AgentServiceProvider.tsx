@@ -62,22 +62,23 @@ export function AgentServiceProvider({
   const restClient = restClientRef.current;
   const wsManager = wsManagerRef.current;
 
-  // Initialize: Load session list and connect WebSocket
+  // Initialize: Connect WebSocket and load session list
   useEffect(() => {
-    async function initialize() {
+    // Connect WebSocket immediately (before any async operations)
+    // This ensures the socket exists when event listeners are registered
+    wsManager.connect();
+
+    async function loadInitialData() {
       try {
         // Load initial session list
         const sessions = await restClient.listSessions();
         dispatch({ type: 'INITIALIZE', sessions });
-
-        // Connect WebSocket
-        wsManager.connect();
       } catch (error) {
         console.error('[AgentServiceProvider] Initialization failed:', error);
       }
     }
 
-    initialize();
+    loadInitialData();
 
     return () => {
       // Cleanup on unmount
