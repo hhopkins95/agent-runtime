@@ -12,7 +12,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { SessionListData, WorkspaceFile } from '../types/session/index.js';
+import type { SessionListData, WorkspaceFile, SessionStatus } from '../types/session/index.js';
 import type { ConversationBlock } from '../types/session/blocks.js';
 import type { StreamEvent } from '../types/session/streamEvents.js';
 
@@ -59,7 +59,7 @@ export interface DomainEvents {
    */
   'session:status': {
     sessionId: string;
-    status: 'pending' | 'building-sandbox' | 'active' | 'inactive';
+    status: SessionStatus;
   };
 
   /**

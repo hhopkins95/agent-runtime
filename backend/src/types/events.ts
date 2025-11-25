@@ -11,7 +11,7 @@
  * - session:status - Session lifecycle status change
  */
 
-import { SessionListData, WorkspaceFile } from "./session/index";
+import { SessionListData, WorkspaceFile, SessionStatus } from "./session/index";
 import { ConversationBlock } from "./session/blocks";
 
 // ============================================================================
@@ -153,11 +153,11 @@ export interface ServerToClientEvents {
   // Session Lifecycle Events
   // -------------------------------------------------------------------------
   /**
-   * Session status changed (active/inactive)
+   * Session status changed
    */
   'session:status': (data: {
     sessionId: string;
-    status: 'active' | 'inactive';
+    status: SessionStatus;
   }) => void;
 
   /**
