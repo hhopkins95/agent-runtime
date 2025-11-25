@@ -31,7 +31,7 @@ const program = new Command()
   .description('Executes the Anthropic Agent SDK inside a Modal sandbox')
   .argument('<prompt>', 'The user\'s message/prompt to send to the agent')
   .option('-r, --resume <sessionId>', 'Resume from existing session')
-  .option('-s', '--session-id <sessionId>', 'The session id to use. Only used if --resume is not provided')
+  .option('-s, --session-id <sessionId>', 'The session id to use. Only used if --resume is not provided')
   .parse();
 
 // Extract parsed arguments
