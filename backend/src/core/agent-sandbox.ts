@@ -16,7 +16,7 @@ import { logger } from '../config/logger.js';
 import { AgentArchitectureAdapter } from '../lib/agent-architectures/base.js';
 import { ModalContext } from '../lib/sandbox/modal/client.js';
 import { AgentProfile } from '../types/agent-profiles.js';
-import { AGENT_ARCHITECTURE_TYPE, SavedSessionData, WorkspaceFile } from '../types/session/index.js';
+import { AGENT_ARCHITECTURE_TYPE, PersistedSessionData, WorkspaceFile } from '../types/session/index.js';
 
 import { getAgentArchitectureAdapter } from '../lib/agent-architectures/factory.js';
 import { streamJSONL } from '../lib/helpers/stream.js';
@@ -68,7 +68,7 @@ interface AgentSandboxProps {
     newSessionId: string,
     architecture: AGENT_ARCHITECTURE_TYPE
   } | {
-    savedSessionData: SavedSessionData
+    savedSessionData: PersistedSessionData
   }
 }
 
@@ -80,6 +80,7 @@ export class AgentSandbox {
 
   private readonly agentProfile: AgentProfile
   private readonly sessionId: string
+  private readonly sandboxId: string
   private readonly sandbox: SandboxPrimitive
   private readonly architectureAdapter: AgentArchitectureAdapter
 
@@ -114,6 +115,7 @@ export class AgentSandbox {
     props: AgentSandboxProps & { sandbox: SandboxPrimitive }
   ) {
     this.sandbox = props.sandbox;
+    this.sandboxId = props.sandbox.getId();
     this.agentProfile = props.agentProfile;
     const architecture = "newSessionId" in props.session ? props.session.architecture : props.session.savedSessionData.type;
 
@@ -123,12 +125,16 @@ export class AgentSandbox {
       this.sessionId = props.session.savedSessionData.sessionId;
     }
 
-
     this.architectureAdapter = getAgentArchitectureAdapter(architecture, props.sandbox, this.sessionId);
 
-
-
     this.initialize(props);
+  }
+
+  /**
+   * Get the unique sandbox ID
+   */
+  getId(): string {
+    return this.sandboxId;
   }
 
 

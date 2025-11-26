@@ -54,37 +54,22 @@ export function setupEventListeners(
   });
 
   /**
-   * Session created - already handled by sessions:changed
-   * (keeping for potential future use or custom logic)
-   */
-  eventBus.on('session:created', (data) => {
-    logger.debug({ sessionId: data.sessionId }, 'Domain event: session created');
-  });
-
-  /**
-   * Session loaded - already handled by sessions:changed
-   */
-  eventBus.on('session:loaded', (data) => {
-    logger.debug({ sessionId: data.sessionId }, 'Domain event: session loaded');
-  });
-
-  /**
-   * Session destroyed
-   */
-  eventBus.on('session:destroyed', (data) => {
-    logger.debug({ sessionId: data.sessionId }, 'Domain event: session destroyed');
-    // sessions:changed will handle the broadcast
-  });
-
-  /**
-   * Session status changed
+   * Session runtime status changed (unified event)
+   * Covers: session loaded, sandbox starting/ready/terminated, session unloaded
    */
   eventBus.on('session:status', (data) => {
     io.to(`session:${data.sessionId}`).emit('session:status', {
       sessionId: data.sessionId,
-      status: data.status,
+      runtime: data.runtime,
     });
-    logger.debug({ sessionId: data.sessionId, status: data.status }, 'Broadcast session status');
+    logger.debug(
+      {
+        sessionId: data.sessionId,
+        isLoaded: data.runtime.isLoaded,
+        sandboxStatus: data.runtime.sandbox?.status ?? 'none',
+      },
+      'Broadcast session status'
+    );
   });
 
   // ==========================================================================
@@ -263,24 +248,5 @@ export function setupEventListeners(
     logger.debug({ sessionId: data.sessionId, path: data.path }, 'Broadcast file deleted');
   });
 
-  // ==========================================================================
-  // Sandbox Events
-  // ==========================================================================
-
-  /**
-   * Sandbox status changed
-   */
-  eventBus.on('sandbox:status', (data) => {
-    io.to(`session:${data.sessionId}`).emit('sandbox:status', {
-      sessionId: data.sessionId,
-      sandboxId: data.sandboxId,
-      status: data.status,
-    });
-    logger.debug(
-      { sessionId: data.sessionId, sandboxId: data.sandboxId, status: data.status },
-      'Broadcast sandbox status'
-    );
-  });
-
-  logger.info('EventBus → WebSocket bridge setup complete (14 event listeners registered)');
+  logger.info('EventBus → WebSocket bridge setup complete (11 event listeners registered)');
 }

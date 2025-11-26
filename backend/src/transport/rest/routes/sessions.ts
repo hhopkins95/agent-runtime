@@ -42,13 +42,13 @@ export function createSessionRoutes(
 
     try {
       const session = await sessionManager.createSession({ agentProfileRef, architecture });
-      const listData = session.getListData();
+      const sessionData = session.getState();
 
       return c.json(
         {
-          sessionId: listData.sessionId,
-          status: listData.status,
-          createdAt: listData.createdAt,
+          sessionId: sessionData.sessionId,
+          runtime: sessionData.runtime,
+          createdAt: sessionData.createdAt,
         },
         201
       );
@@ -149,7 +149,7 @@ export function createSessionRoutes(
     }
 
     try {
-      await sessionManager.destroySession(sessionId);
+      await sessionManager.unloadSession(sessionId);
 
       return c.json({ success: true, sessionId });
     } catch (error) {

@@ -12,9 +12,8 @@
  */
 
 import { EventEmitter } from 'events';
-import type { SessionListData, WorkspaceFile, SessionStatus } from '../types/session/index.js';
+import type { WorkspaceFile, SessionRuntimeState } from '../types/session/index.js';
 import type { ConversationBlock } from '../types/session/blocks.js';
-import type { StreamEvent } from '../types/session/streamEvents.js';
 
 /**
  * Domain events emitted by business logic
@@ -29,42 +28,18 @@ export interface DomainEvents {
   // ============================================================================
 
   /**
-   * New session created
-   * Emitted by: SessionManager.createSession()
-   */
-  'session:created': {
-    sessionId: string;
-    metadata: SessionListData;
-  };
-
-  /**
-   * Existing session loaded from storage
-   * Emitted by: SessionManager.loadSession()
-   */
-  'session:loaded': {
-    sessionId: string;
-  };
-
-  /**
-   * Session destroyed and cleaned up
-   * Emitted by: AgentSession.destroy()
-   */
-  'session:destroyed': {
-    sessionId: string;
-  };
-
-  /**
-   * Session status changed
-   * Emitted by: AgentSession
+   * Session runtime status changed (unified event for all status updates)
+   * Replaces: session:created, session:loaded, session:destroyed, sandbox:status
+   * Emitted by: AgentSession, SessionManager
    */
   'session:status': {
     sessionId: string;
-    status: SessionStatus;
+    runtime: SessionRuntimeState;
   };
 
   /**
    * Sessions list changed (trigger broadcast)
-   * Emitted by: SessionManager after create/load/destroy
+   * Emitted by: SessionManager after create/load/unload
    */
   'sessions:changed': void;
 
@@ -191,20 +166,6 @@ export interface DomainEvents {
     path: string;
   };
 
-  // ============================================================================
-  // Sandbox Events
-  // ============================================================================
-
-  /**
-   * Sandbox status changed
-   * Emitted by: AgentSession
-   */
-  'sandbox:status': {
-    sessionId: string;
-    sandboxId: string;
-    status: 'healthy' | 'unhealthy' | 'terminated';
-    restartCount?: number;
-  };
 }
 
 /**

@@ -126,10 +126,6 @@ export async function createAgentRuntime(
     {
       persistence: config.persistence,
     },
-    {
-      idleTimeoutMs: config.idleTimeoutMs ?? 900000, // 15 min default
-      syncIntervalMs: config.syncIntervalMs ?? 30000, // 30 sec default
-    }
   );
 
   logger.debug('SessionManager created');
@@ -170,9 +166,6 @@ export async function createAgentRuntime(
 
       // Initialize SessionManager (fetch all sessions from persistence)
       await sessionManager.initialize();
-
-      // Start background jobs (idle timeout monitoring)
-      sessionManager.startBackgroundJobs();
 
       logger.info('Agent runtime started successfully');
     },

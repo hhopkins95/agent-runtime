@@ -11,7 +11,7 @@
  * - session:status - Session lifecycle status change
  */
 
-import { SessionListData, WorkspaceFile, SessionStatus } from "./session/index";
+import { SessionListItem, SessionRuntimeState, WorkspaceFile } from "./session/index";
 import { ConversationBlock } from "./session/blocks";
 
 // ============================================================================
@@ -24,13 +24,13 @@ export interface ServerToClientEvents {
   // -------------------------------------------------------------------------
 
   /**
-   * Complete list of all sessions (active + inactive from Convex)
+   * Complete list of all sessions with runtime state
    * Sent when:
    * - Client first connects
-   * - New session created
-   * - Session status changes
+   * - Session created/loaded/unloaded
+   * - Session runtime state changes
    */
-  'sessions:list': (sessions: SessionListData[]) => void;
+  'sessions:list': (sessions: SessionListItem[]) => void;
 
   // -------------------------------------------------------------------------
   // Block Streaming Events (session:block:*)
@@ -152,30 +152,14 @@ export interface ServerToClientEvents {
   // -------------------------------------------------------------------------
   // Session Lifecycle Events
   // -------------------------------------------------------------------------
+
   /**
-   * Session status changed
+   * Session runtime status changed (unified event)
+   * Covers: session loaded/unloaded, sandbox starting/ready/terminated
    */
   'session:status': (data: {
     sessionId: string;
-    status: SessionStatus;
-  }) => void;
-
-  /**
-   * Sandbox health status
-   */
-  'sandbox:status': (data: {
-    sessionId: string;
-    sandboxId: string;
-    status: 'healthy' | 'unhealthy' | 'terminated';
-    restartCount?: number;
-  }) => void;
-
-  /**
-   * Idle warning before automatic timeout
-   */
-  'session:idle:warning': (data: {
-    sessionId: string;
-    timeRemaining: number; // milliseconds
+    runtime: SessionRuntimeState;
   }) => void;
 
   // -------------------------------------------------------------------------

@@ -50,14 +50,15 @@ export function setupSessionLifecycleHandlers(
       const state = session.getState();
       socket.emit('session:status', {
         sessionId,
-        status: state.status,
+        runtime: state.runtime,
       });
 
       logger.info(
         {
           socketId: socket.id,
           sessionId,
-          status: state.status,
+          isLoaded: state.runtime.isLoaded,
+          sandboxStatus: state.runtime.sandbox?.status ?? 'none',
         },
         'Client joined session room'
       );

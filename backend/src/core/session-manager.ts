@@ -1,36 +1,28 @@
 /**
  * SessionManager - Container orchestrating all agent sessions
  *
- * Refactored Responsibilities:
- * - Fetch all sessions from persistence (active + inactive)
+ * Responsibilities:
+ * - Fetch all sessions from persistence (enriched with runtime state)
  * - Create new AgentSession instances
  * - Load existing AgentSession from persistence
- * - Destroy AgentSession instances
+ * - Unload AgentSession instances (triggered by sandbox termination)
  * - Emit domain events to EventBus
- * - Idle timeout monitoring (background job)
  *
- * REFACTORED: Now uses injected adapters instead of direct Convex calls
+ * Note: Idle timeout is handled by Modal - when sandbox terminates,
+ * the AgentSession notifies us via callback to unload the session.
  */
 
 import { logger } from '../config/logger.js';
 import type { ModalContext } from '../lib/sandbox/modal/client.js';
 import type { EventBus } from './event-bus.js';
 import { AgentSession } from './agent-session.js';
-import type { SessionListData, AGENT_ARCHITECTURE_TYPE } from '../types/session/index.js';
 import type {
-  PersistenceAdapter,
-} from '../types/persistence-adapter.js';
-
-/**
- * SessionManager configuration
- */
-interface SessionManagerConfig {
-  idleTimeoutMs: number;
-  syncIntervalMs: number;
-}
-
-const DEFAULT_IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
-const CLEANUP_INTERVAL_MS = 60 * 1000; // Check every 1 minute
+  SessionListItem,
+  SessionRuntimeState,
+  AGENT_ARCHITECTURE_TYPE,
+  PersistedSessionListData,
+} from '../types/session/index.js';
+import type { PersistenceAdapter } from '../types/persistence-adapter.js';
 
 /**
  * SessionManager - Container for all agent sessions
@@ -38,8 +30,8 @@ const CLEANUP_INTERVAL_MS = 60 * 1000; // Check every 1 minute
  * Uses dependency injection pattern for all external dependencies
  */
 export class SessionManager {
-  // Active sessions (in-memory, with live sandboxes)
-  private activeSessions: Map<string, AgentSession> = new Map();
+  // Loaded sessions (in-memory, may or may not have active sandbox)
+  private loadedSessions: Map<string, AgentSession> = new Map();
 
   // Dependencies
   private readonly modalContext: ModalContext;
@@ -47,10 +39,6 @@ export class SessionManager {
   private readonly adapters: {
     persistence: PersistenceAdapter;
   };
-  private readonly config: SessionManagerConfig;
-
-  // Background jobs
-  private cleanupInterval?: NodeJS.Timeout;
 
   constructor(
     modalContext: ModalContext,
@@ -58,18 +46,10 @@ export class SessionManager {
     adapters: {
       persistence: PersistenceAdapter;
     },
-    config: {
-      idleTimeoutMs?: number;
-      syncIntervalMs?: number;
-    } = {}
   ) {
     this.modalContext = modalContext;
     this.eventBus = eventBus;
     this.adapters = adapters;
-    this.config = {
-      idleTimeoutMs: config.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-      syncIntervalMs: config.syncIntervalMs ?? 30000,
-    };
     logger.info('SessionManager initialized with injected adapters');
   }
 
@@ -78,22 +58,37 @@ export class SessionManager {
   // ==========================================================================
 
   /**
-   * Get all sessions (active from memory + inactive from persistence)
-   * This is the source for sessions:list event
+   * Get all sessions from persistence, enriched with runtime state
    */
-  async getAllSessions(): Promise<SessionListData[]> {
+  async getAllSessions(): Promise<SessionListItem[]> {
     try {
-      // Get all sessions from persistence adapter (includes both active and inactive)
-      const sessions = await this.adapters.persistence.listAllSessions();
+      const persisted = await this.adapters.persistence.listAllSessions();
+
+      // Enrich with runtime state
+      const sessions = persisted.map(session => ({
+        ...session,
+        runtime: this.getRuntimeState(session.sessionId),
+      }));
 
       logger.debug({ sessionCount: sessions.length }, 'Fetched all sessions from persistence');
 
       return sessions;
     } catch (error) {
       logger.error({ error }, 'Failed to get all sessions from persistence');
-      // Fallback to active sessions only
-      return this.getActiveSessionsMetadata();
+      // Fallback to loaded sessions only
+      return this.getLoadedSessionsAsListItems();
     }
+  }
+
+  /**
+   * Get runtime state for a session
+   */
+  private getRuntimeState(sessionId: string): SessionRuntimeState {
+    const session = this.loadedSessions.get(sessionId);
+    if (!session) {
+      return { isLoaded: false, sandbox: null };
+    }
+    return session.getRuntimeState();
   }
 
   /**
@@ -114,26 +109,22 @@ export class SessionManager {
         },
         this.modalContext,
         this.eventBus,
-        this.adapters.persistence
+        this.adapters.persistence,
+        this.handleSandboxTerminated.bind(this),
       );
 
-      // Add to active sessions
-      this.activeSessions.set(session.sessionId, session);
+      // Add to loaded sessions
+      this.loadedSessions.set(session.sessionId, session);
 
       // Persist session record
-      await this.adapters.persistence.createSessionRecord(session.getListData());
+      await this.adapters.persistence.createSessionRecord(session.getPersistedListData());
 
       logger.info(
-        { sessionId: session.sessionId, activeCount: this.activeSessions.size },
+        { sessionId: session.sessionId, loadedCount: this.loadedSessions.size },
         'Session created successfully'
       );
 
       // Emit domain events
-      this.eventBus.emit('session:created', {
-        sessionId: session.sessionId,
-        metadata: session.getListData(),
-      });
-
       this.eventBus.emit('sessions:changed');
 
       return session;
@@ -148,10 +139,10 @@ export class SessionManager {
    */
   async loadSession(sessionId: string): Promise<AgentSession> {
     try {
-      // Check if already active
-      if (this.activeSessions.has(sessionId)) {
-        logger.warn({ sessionId }, 'Session already active, returning existing');
-        return this.activeSessions.get(sessionId)!;
+      // Check if already loaded
+      if (this.loadedSessions.has(sessionId)) {
+        logger.warn({ sessionId }, 'Session already loaded, returning existing');
+        return this.loadedSessions.get(sessionId)!;
       }
 
       logger.info({ sessionId }, 'Loading session from persistence...');
@@ -161,19 +152,19 @@ export class SessionManager {
         { sessionId },
         this.modalContext,
         this.eventBus,
-        this.adapters.persistence
+        this.adapters.persistence,
+        this.handleSandboxTerminated.bind(this),
       );
 
-      // Add to active sessions
-      this.activeSessions.set(sessionId, session);
+      // Add to loaded sessions
+      this.loadedSessions.set(sessionId, session);
 
       logger.info(
-        { sessionId, activeCount: this.activeSessions.size },
+        { sessionId, loadedCount: this.loadedSessions.size },
         'Session loaded successfully'
       );
 
       // Emit domain events
-      this.eventBus.emit('session:loaded', { sessionId });
       this.eventBus.emit('sessions:changed');
 
       return session;
@@ -184,50 +175,68 @@ export class SessionManager {
   }
 
   /**
-   * Get active session by ID
+   * Get loaded session by ID
    */
   getSession(sessionId: string): AgentSession | undefined {
-    return this.activeSessions.get(sessionId);
+    return this.loadedSessions.get(sessionId);
   }
 
   /**
-   * Check if session is active (has live sandbox)
+   * Check if session is loaded in memory
    */
-  isSessionActive(sessionId: string): boolean {
-    return this.activeSessions.has(sessionId);
+  isSessionLoaded(sessionId: string): boolean {
+    return this.loadedSessions.has(sessionId);
   }
 
   /**
-   * Destroy session and cleanup
+   * Unload session and cleanup (sync to persistence, terminate sandbox, remove from memory)
    */
-  async destroySession(sessionId: string): Promise<void> {
-    const session = this.activeSessions.get(sessionId);
+  async unloadSession(sessionId: string): Promise<void> {
+    const session = this.loadedSessions.get(sessionId);
     if (!session) {
-      logger.warn({ sessionId }, 'Session not found for destruction');
+      logger.warn({ sessionId }, 'Session not found for unloading');
       return;
     }
 
     try {
-      logger.info({ sessionId }, 'Destroying session...');
+      logger.info({ sessionId }, 'Unloading session...');
 
-      // Destroy session (includes final sync)
+      // Destroy session (includes sync and sandbox termination)
       await session.destroy();
 
-      // Remove from active sessions
-      this.activeSessions.delete(sessionId);
+      // Remove from loaded sessions
+      this.loadedSessions.delete(sessionId);
 
-      logger.info({ sessionId, activeCount: this.activeSessions.size }, 'Session destroyed');
+      logger.info({ sessionId, loadedCount: this.loadedSessions.size }, 'Session unloaded');
 
-      // Emit domain event
+      // Emit status update (session is now unloaded)
+      this.eventBus.emit('session:status', {
+        sessionId,
+        runtime: { isLoaded: false, sandbox: null },
+      });
       this.eventBus.emit('sessions:changed');
-
-      // Note: session:destroyed event is emitted by AgentSession.destroy()
     } catch (error) {
-      logger.error({ error, sessionId }, 'Failed to destroy session');
-      // Remove from map even if destruction failed
-      this.activeSessions.delete(sessionId);
+      logger.error({ error, sessionId }, 'Failed to unload session');
+      // Remove from map even if unloading failed
+      this.loadedSessions.delete(sessionId);
       throw error;
     }
+  }
+
+  /**
+   * Handle sandbox termination callback from AgentSession
+   * Called when Modal terminates the sandbox (idle timeout)
+   */
+  private handleSandboxTerminated(sessionId: string): void {
+    logger.info({ sessionId }, 'Sandbox terminated, unloading session...');
+    // Use setImmediate to avoid blocking the health check callback
+    setImmediate(async () => {
+      try {
+        await this.unloadSession(sessionId);
+      } catch (error) {
+        logger.error({ error, sessionId }, 'Failed to unload session after sandbox termination');
+      }
+    });
   }
 
   // ==========================================================================
@@ -235,99 +244,34 @@ export class SessionManager {
   // ==========================================================================
 
   /**
-   * Get active session count
+   * Get loaded session count
    */
-  getActiveSessionCount(): number {
-    return this.activeSessions.size;
+  getLoadedSessionCount(): number {
+    return this.loadedSessions.size;
   }
 
   /**
-   * Get all active session IDs
+   * Get all loaded session IDs
    */
-  getActiveSessionIds(): string[] {
-    return Array.from(this.activeSessions.keys());
+  getLoadedSessionIds(): string[] {
+    return Array.from(this.loadedSessions.keys());
   }
 
   /**
-   * Get all active sessions
+   * Get all loaded sessions
    */
-  getActiveSessions(): AgentSession[] {
-    return Array.from(this.activeSessions.values());
+  getLoadedSessions(): AgentSession[] {
+    return Array.from(this.loadedSessions.values());
   }
 
   /**
-   * Get metadata for all active sessions
+   * Get loaded sessions as SessionListItem (with runtime state)
    */
-  private getActiveSessionsMetadata(): SessionListData[] {
-    return this.getActiveSessions().map((session) => session.getListData());
-  }
-
-  // ==========================================================================
-  // Background Jobs
-  // ==========================================================================
-
-  /**
-   * Start idle timeout cleanup job
-   */
-  startIdleTimeoutJob(): void {
-    if (this.cleanupInterval) {
-      logger.warn('Idle timeout job already running');
-      return;
-    }
-
-    logger.info(
-      { idleTimeoutMs: this.config.idleTimeoutMs, intervalMs: CLEANUP_INTERVAL_MS },
-      'Starting idle timeout job'
-    );
-
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupIdleSessions();
-    }, CLEANUP_INTERVAL_MS);
-  }
-
-  /**
-   * Stop idle timeout job
-   */
-  stopIdleTimeoutJob(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = undefined;
-      logger.info('Idle timeout job stopped');
-    }
-  }
-
-  /**
-   * Clean up idle sessions
-   */
-  private async cleanupIdleSessions(): Promise<void> {
-    const now = Date.now();
-    const idleSessions: string[] = [];
-
-    // Find idle sessions
-    for (const [sessionId, session] of this.activeSessions.entries()) {
-      const metadata = session.getListData();
-      const idleTime = now - (metadata.lastActivity || 0);
-
-      if (idleTime > this.config.idleTimeoutMs) {
-        idleSessions.push(sessionId);
-      }
-    }
-
-    if (idleSessions.length === 0) {
-      logger.debug('No idle sessions to clean up');
-      return;
-    }
-
-    logger.info({ idleCount: idleSessions.length }, 'Cleaning up idle sessions...');
-
-    // Destroy idle sessions
-    for (const sessionId of idleSessions) {
-      try {
-        await this.destroySession(sessionId);
-      } catch (error) {
-        logger.error({ error, sessionId }, 'Failed to clean up idle session');
-      }
-    }
+  private getLoadedSessionsAsListItems(): SessionListItem[] {
+    return this.getLoadedSessions().map((session) => ({
+      ...session.getPersistedListData(),
+      runtime: session.getRuntimeState(),
+    }));
   }
 
   // ==========================================================================
@@ -350,36 +294,25 @@ export class SessionManager {
   }
 
   /**
-   * Start background jobs (idle timeout monitoring)
-   */
-  startBackgroundJobs(): void {
-    this.startIdleTimeoutJob();
-  }
-
-  /**
    * Check if SessionManager is healthy
    */
   isHealthy(): boolean {
-    // Simple health check - could be expanded
     return true;
   }
 
   /**
-   * Graceful shutdown - destroy all sessions
+   * Graceful shutdown - unload all sessions
    */
   async shutdown(): Promise<void> {
-    logger.info({ activeCount: this.activeSessions.size }, 'Shutting down SessionManager...');
+    logger.info({ loadedCount: this.loadedSessions.size }, 'Shutting down SessionManager...');
 
-    // Stop background jobs
-    this.stopIdleTimeoutJob();
-
-    // Destroy all active sessions
-    const sessionIds = Array.from(this.activeSessions.keys());
+    // Unload all loaded sessions
+    const sessionIds = Array.from(this.loadedSessions.keys());
     for (const sessionId of sessionIds) {
       try {
-        await this.destroySession(sessionId);
+        await this.unloadSession(sessionId);
       } catch (error) {
-        logger.error({ error, sessionId }, 'Failed to destroy session during shutdown');
+        logger.error({ error, sessionId }, 'Failed to unload session during shutdown');
       }
     }
 
