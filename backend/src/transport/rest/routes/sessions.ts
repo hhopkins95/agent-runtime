@@ -18,6 +18,7 @@ export function createSessionRoutes(
     const body = await c.req.json();
     const { agentProfileRef, architecture } = body;
 
+
     if (!agentProfileRef || typeof agentProfileRef !== "string") {
       throw new HTTPException(400, {
         message: JSON.stringify(

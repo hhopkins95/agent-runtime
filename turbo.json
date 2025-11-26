@@ -1,0 +1,25 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "dependsOn": ["^dev"],
+      "cache": false
+    },
+    "@example/backend#dev": {
+      "dependsOn": ["@hhopkins/agent-runtime#dev"],
+      "cache": false
+    },
+    "@example/frontend#dev": {
+      "dependsOn": ["@hhopkins/agent-runtime-react#dev"],
+      "cache": false
+    },
+    "check": {
+      "dependsOn": ["^build"]
+    }
+  }
+}

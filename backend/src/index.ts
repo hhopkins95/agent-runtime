@@ -1,5 +1,5 @@
 /**
- * Generic Agent Runtime - Public API
+ *  Generic Agent Runtime - Public API
  *
  * This is the public API for the generic agent runtime.
  * Applications import from this module to use the runtime with their own adapters.
@@ -13,6 +13,7 @@
  *   persistence: new MyPersistenceAdapter(),
  *   profileLoader: new MyProfileLoader(),
  *   sandboxConfig: new MySandboxConfig(),
+ * 
  *   modal: { ... },
  * });
  * ```
@@ -35,6 +36,7 @@ export type {
   // Adapter interfaces
   PersistenceAdapter,
 
+  
   // Session types
   SessionListData,
   SavedSessionData,

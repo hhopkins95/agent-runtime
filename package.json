@@ -1,6 +1,7 @@
 {
   "name": "agent-service-workspace",
   "version": "0.1.0",
+  "packageManager": "pnpm@9.12.5",
   "private": true,
   "description": "Workspace for agent runtime packages",
   "scripts": {
@@ -13,8 +14,8 @@
     "dev:client": "pnpm --filter @hhopkins/agent-runtime-react dev",
     "example:backend": "pnpm --filter @example/backend dev",
     "example:frontend": "pnpm --filter @example/frontend dev",
-    "dev": "concurrently --names \"backend,client,ex-backend,ex-frontend\" --prefix-colors \"blue,magenta,green,cyan\" \"pnpm dev:backend\" \"pnpm dev:client\" \"wait-on backend/dist/index.js client/dist/index.js && pnpm example:backend\" \"wait-on backend/dist/index.js client/dist/index.js && pnpm example:frontend\"",
-    "docs" : "npx @hhopkins/smart-docs ./docs"
+    "dev": "turbo run dev",
+    "docs": "npx @hhopkins/smart-docs ./docs"
   },
   "workspaces": [
     "backend",
@@ -24,6 +25,7 @@
   ],
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "turbo": "^2.6.1",
     "typescript": "^5.7.2",
     "wait-on": "^8.0.1"
   },
