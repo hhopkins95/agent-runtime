@@ -276,6 +276,8 @@ export class AgentSession {
       throw new Error('Session not initialized');
     }
 
+    console.log("Sending Message")
+
     try {
 
       logger.info(

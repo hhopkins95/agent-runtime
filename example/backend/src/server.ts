@@ -1,7 +1,7 @@
 import { createServer } from "http";
-import { createAgentRuntime } from "@hhopkins/agent-runtime";
+import { createAgentRuntime, type PersistenceAdapter } from "@hhopkins/agent-runtime";
 import dotenv from "dotenv";
-import { InMemoryPersistenceAdapter } from "./persistence/in-memory-adapter.js";
+import { InMemoryPersistenceAdapter, SqlitePersistenceAdapter } from "./persistence/index.js";
 import { config, validateConfig, exampleAgentProfile } from "./config.js";
 
 // Load environment variables
@@ -23,9 +23,18 @@ async function main() {
     // Validate environment variables
     validateConfig();
 
-    // Create persistence adapter with example agent profile
-    const persistence = new InMemoryPersistenceAdapter([exampleAgentProfile]);
-    console.log("✅ In-memory persistence adapter initialized");
+    // Create persistence adapter based on configuration
+    let persistence: PersistenceAdapter;
+    if (config.persistence.type === "sqlite") {
+      persistence = new SqlitePersistenceAdapter(
+        config.persistence.sqliteDbPath,
+        [exampleAgentProfile]
+      );
+      console.log(`✅ SQLite persistence adapter initialized (${config.persistence.sqliteDbPath})`);
+    } else {
+      persistence = new InMemoryPersistenceAdapter([exampleAgentProfile]);
+      console.log("✅ In-memory persistence adapter initialized");
+    }
 
     // Create agent runtime
     const runtime = await createAgentRuntime({

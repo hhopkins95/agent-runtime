@@ -48,6 +48,11 @@ Be concise and helpful in your responses.`,
 };
 
 /**
+ * Persistence type: "memory" for in-memory storage, "sqlite" for SQLite database
+ */
+export type PersistenceType = "memory" | "sqlite";
+
+/**
  * Environment configuration
  */
 export const config = {
@@ -55,6 +60,12 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || "development",
   workspaceDir: process.env.WORKSPACE_DIR || "./workspace",
   logLevel: process.env.LOG_LEVEL || "info",
+
+  // Persistence configuration
+  persistence: {
+    type: (process.env.PERSISTENCE_TYPE || "sqlite") as PersistenceType,
+    sqliteDbPath: process.env.SQLITE_DB_PATH || "./data/agent-sessions.db",
+  },
 
   // Modal configuration
   modal: {

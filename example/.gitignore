@@ -14,6 +14,9 @@ out/
 # Workspace files
 workspace/
 
+# SQLite database
+data/
+
 # Logs
 *.log
 npm-debug.log*
