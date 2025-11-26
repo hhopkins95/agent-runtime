@@ -266,6 +266,8 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
             for await (const sdkMsg of streamJSONL<SDKMessage>(stdout, 'claude-sdk', logger)) {
                 messageCount++;
 
+                logger.info(`SDK MESSAGE TYPE: ${sdkMsg?.type}`);
+
                 // Check for SDK errors
                 if (sdkMsg.type === 'result' && sdkMsg.subtype !== 'success') {
                     logger.error(

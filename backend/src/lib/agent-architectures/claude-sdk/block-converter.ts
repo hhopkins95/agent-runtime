@@ -67,6 +67,7 @@ export function sdkMessageToBlocks(msg: SDKMessage): ConversationBlock[] {
 export function sdkMessagesToBlocks(messages: SDKMessage[]): ConversationBlock[] {
   const blocks: ConversationBlock[] = [];
 
+
   for (const msg of messages) {
     const converted = sdkMessageToBlocks(msg);
     blocks.push(...converted);
