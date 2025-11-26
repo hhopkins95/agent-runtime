@@ -27,7 +27,8 @@ import type {
   SavedSessionData,
   WorkspaceFile,
   AGENT_ARCHITECTURE_TYPE,
-  SessionListData
+  SessionListData,
+  SessionStatus
 } from '../types/session/index.js';
 import type { ConversationBlock } from '../types/session/blocks.js';
 import type { StreamEvent } from '../types/session/streamEvents.js';
@@ -73,6 +74,9 @@ export class AgentSession {
   private workspaceWatcher?: AsyncGenerator<WorkspaceFile>;
   private sessionTranscriptWatcher?: AsyncGenerator<string>;
 
+  // Sandbox monitoring
+  private sandboxRestartCount: number = 0;
+
 
 
   static async create(
@@ -92,6 +96,9 @@ export class AgentSession {
     persistenceAdapter: PersistenceAdapter,
   ): Promise<AgentSession> {
 
+    let session: AgentSession;
+    let sessionInput: { newSessionId: string; architecture: AGENT_ARCHITECTURE_TYPE } | { savedSessionData: SavedSessionData };
+
     if ('sessionId' in input) {
       // Load existing session from persistence
       const sessionData = await persistenceAdapter.loadSession(input.sessionId);
@@ -101,37 +108,39 @@ export class AgentSession {
 
       const agentProfile = await persistenceAdapter.loadAgentProfile(sessionData.agentProfileReference)
 
-
       if (!agentProfile) {
         throw new Error(`Agent profile ${sessionData.agentProfileReference} not found in persistence`);
       }
 
-      return new AgentSession({
+      sessionInput = { savedSessionData: sessionData };
+      session = new AgentSession({
         modalContext,
         eventBus,
         persistenceAdapter,
         agentProfile,
-        session: { savedSessionData: sessionData },
+        session: sessionInput,
+      });
+    } else {
+      // Create a new session
+      const uuid = randomUUID();
+      const agentProfile = await persistenceAdapter.loadAgentProfile(input.agentProfileRef);
+      if (!agentProfile) {
+        throw new Error(`Agent profile ${input.agentProfileRef} not found in persistence`);
+      }
+
+      sessionInput = { newSessionId: uuid, architecture: input.architecture };
+      session = new AgentSession({
+        modalContext,
+        eventBus,
+        persistenceAdapter,
+        agentProfile,
+        session: sessionInput,
       });
     }
 
-    // otherwise create a new session
-    const uuid = randomUUID();
-    const agentProfile = await persistenceAdapter.loadAgentProfile(input.agentProfileRef);
-    if (!agentProfile) {
-      throw new Error(`Agent profile ${input.agentProfileRef} not found in persistence`);
-    }
-
-    return new AgentSession({
-      modalContext,
-      eventBus,
-      persistenceAdapter,
-      agentProfile,
-      session: { newSessionId: uuid, architecture: input.architecture },
-    });
-
-
-
+    // Await initialization to ensure session is fully ready before returning
+    await session.initialize(sessionInput);
+    return session;
   }
 
   private constructor(
@@ -191,23 +200,31 @@ export class AgentSession {
       })) ?? [];
     }
 
-
-    this.initialize(props.session);
+    // Note: initialize() is now called explicitly from create() after construction
   }
 
-  private async initialize(session: {
+  /**
+   * Initialize the session - creates sandbox, parses transcripts, starts watchers
+   * Must be called after construction and awaited before using the session
+   */
+  async initialize(session: {
     newSessionId: string,
     architecture: AGENT_ARCHITECTURE_TYPE
   } | {
     savedSessionData: SavedSessionData,
   }): Promise<void> {
 
-    // Create the sandbox
+    // Create the sandbox - but don't persist building-sandbox status for new sessions
+    // (they haven't been persisted yet, session-manager will persist after initialize completes)
     this.status = "building-sandbox";
     this.eventBus.emit('session:status', {
       sessionId: this.sessionId,
       status: 'building-sandbox',
     });
+    // For existing sessions, persist the building-sandbox status
+    if ('savedSessionData' in session) {
+      await this.persistenceAdapter.updateSessionRecord(this.sessionId, { status: 'building-sandbox' });
+    }
     if ('newSessionId' in session) {
       this.sandbox = await AgentSandbox.create({
         agentProfile: this.agentProfile,
@@ -243,11 +260,29 @@ export class AgentSession {
     this.startHealthMonitoring()
 
     // Transition to active status and notify clients
+    // For existing sessions, persist to DB. For new sessions, the record will be created by session-manager
+    // after initialize() completes, with the correct active status from getListData()
     this.status = 'active';
     this.eventBus.emit('session:status', {
       sessionId: this.sessionId,
       status: 'active',
     });
+    if ('savedSessionData' in session) {
+      await this.persistenceAdapter.updateSessionRecord(this.sessionId, { status: 'active' });
+    }
+  }
+
+  /**
+   * Update session status, emit event, and persist to database
+   */
+  private async updateStatus(status: SessionStatus): Promise<void> {
+    this.status = status;
+    this.eventBus.emit('session:status', {
+      sessionId: this.sessionId,
+      status,
+    });
+    // Persist status change immediately to database
+    await this.persistenceAdapter.updateSessionRecord(this.sessionId, { status });
   }
 
   private async reloadSandbox(): Promise<void> {
@@ -276,10 +311,31 @@ export class AgentSession {
       throw new Error('Session not initialized');
     }
 
-    console.log("Sending Message")
+    // Update lastActivity timestamp
+    this.lastActivity = Date.now();
+
+    // Emit user message block before agent processing
+    const userBlockId = randomUUID();
+    const userBlock = {
+      id: userBlockId,
+      type: 'user_message' as const,
+      content: message,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.eventBus.emit('session:block:start', {
+      sessionId: this.sessionId,
+      conversationId: 'main',
+      block: userBlock,
+    });
+    this.eventBus.emit('session:block:complete', {
+      sessionId: this.sessionId,
+      conversationId: 'main',
+      blockId: userBlockId,
+      block: userBlock,
+    });
 
     try {
-
       logger.info(
         {
           sessionId: this.sessionId,
@@ -336,6 +392,9 @@ export class AgentSession {
             break;
         }
       }
+
+      // Update lastActivity after message processing completes
+      this.lastActivity = Date.now();
     } catch (error) {
       logger.error({ error, sessionId: this.sessionId, architecture: this.architecture }, 'Failed to send message');
       throw error;
@@ -497,8 +556,18 @@ export class AgentSession {
 
     this.sandboxHeartbeat = setInterval(async () => {
       const exitCode = await this.sandbox?.heartbeat();
+
+      // Emit sandbox status event every check
+      this.eventBus.emit('sandbox:status', {
+        sessionId: this.sessionId,
+        sandboxId: this.sandboxId ?? 'unknown',
+        status: exitCode === null ? 'healthy' : 'unhealthy',
+        restartCount: this.sandboxRestartCount,
+      });
+
       if (exitCode !== null) {
         logger.error({ sessionId: this.sessionId, exitCode }, 'Sandbox heartbeat failed');
+        this.sandboxRestartCount++;
         await this.reloadSandbox();
       }
     }, 1000 * 30); // 30 seconds

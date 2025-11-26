@@ -203,6 +203,7 @@ export interface DomainEvents {
     sessionId: string;
     sandboxId: string;
     status: 'healthy' | 'unhealthy' | 'terminated';
+    restartCount?: number;
   };
 }
 

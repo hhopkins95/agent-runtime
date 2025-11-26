@@ -57,6 +57,13 @@ export interface SessionState {
     }
   >;
 
+  // Sandbox status
+  sandboxStatus?: {
+    sandboxId: string;
+    status: 'healthy' | 'unhealthy' | 'terminated';
+    restartCount?: number;
+  };
+
   // Loading states
   isLoading: boolean;
   isStreaming: boolean;
@@ -154,6 +161,15 @@ export type AgentServiceAction =
   | { type: 'FILE_MODIFIED'; sessionId: string; file: WorkspaceFile }
   | { type: 'FILE_DELETED'; sessionId: string; path: string }
 
+  // Sandbox Events
+  | {
+      type: 'SANDBOX_STATUS_UPDATED';
+      sessionId: string;
+      sandboxId: string;
+      status: 'healthy' | 'unhealthy' | 'terminated';
+      restartCount?: number;
+    }
+
   // Debug Events
   | { type: 'EVENT_LOGGED'; eventName: string; payload: unknown }
   | { type: 'EVENTS_CLEARED' };
@@ -195,21 +211,29 @@ export function agentServiceReducer(
     }
 
     case 'SESSION_CREATED': {
+      // Check if session already exists (from SESSIONS_LIST_UPDATED due to race condition)
+      const exists = state.sessionList.some(s => s.sessionId === action.session.sessionId);
+
       const newState = {
         ...state,
-        sessionList: [...state.sessionList, action.session],
+        sessionList: exists
+          ? state.sessionList.map(s =>
+              s.sessionId === action.session.sessionId ? action.session : s
+            )
+          : [...state.sessionList, action.session],
       };
 
-      // Initialize session state
+      // Initialize or update session state
       const sessions = new Map(state.sessions);
+      const existingSession = sessions.get(action.session.sessionId);
       sessions.set(action.session.sessionId, {
         info: action.session,
-        blocks: [],
-        metadata: {},
-        files: [],
-        subagents: new Map(),
-        isLoading: false,
-        isStreaming: false,
+        blocks: existingSession?.blocks ?? [],
+        metadata: existingSession?.metadata ?? {},
+        files: existingSession?.files ?? [],
+        subagents: existingSession?.subagents ?? new Map(),
+        isLoading: existingSession?.isLoading ?? false,
+        isStreaming: existingSession?.isStreaming ?? false,
       });
 
       newState.sessions = sessions;
@@ -563,6 +587,24 @@ export function agentServiceReducer(
       sessions.set(action.sessionId, {
         ...session,
         files: session.files.filter((f) => f.path !== action.path),
+      });
+
+      return { ...state, sessions };
+    }
+
+    case 'SANDBOX_STATUS_UPDATED': {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get(action.sessionId);
+
+      if (!session) return state;
+
+      sessions.set(action.sessionId, {
+        ...session,
+        sandboxStatus: {
+          sandboxId: action.sandboxId,
+          status: action.status,
+          restartCount: action.restartCount,
+        },
       });
 
       return { ...state, sessions };

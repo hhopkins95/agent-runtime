@@ -228,6 +228,19 @@ export function AgentServiceProvider({
       });
     });
 
+    // Sandbox Status Events
+    wsManager.on('sandbox:status', (data) => {
+      logEvent('sandbox:status', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'sandbox:status', payload: data });
+      dispatch({
+        type: 'SANDBOX_STATUS_UPDATED',
+        sessionId: data.sessionId,
+        sandboxId: data.sandboxId,
+        status: data.status,
+        restartCount: data.restartCount,
+      });
+    });
+
     // Error Events
     wsManager.on('error', (error) => {
       console.error('[AgentService] WebSocket error:', error);

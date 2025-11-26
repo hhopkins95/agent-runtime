@@ -167,6 +167,7 @@ export interface ServerToClientEvents {
     sessionId: string;
     sandboxId: string;
     status: 'healthy' | 'unhealthy' | 'terminated';
+    restartCount?: number;
   }) => void;
 
   /**
