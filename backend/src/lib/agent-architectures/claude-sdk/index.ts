@@ -5,7 +5,7 @@ import { StreamEvent } from "../../../types/session/streamEvents.js";
 import { SandboxPrimitive } from "../../sandbox/base.js";
 import { ConversationBlock } from "../../../types/session/blocks.js";
 import { parseClaudeTranscriptFile } from "./claude-transcript-parser.js";
-import { sdkMessageToBlocks, extractToolResultBlocks } from "./block-converter.js";
+import { sdkMessageToBlocks, extractToolResultBlocks, parseStreamEvent } from "./block-converter.js";
 import { logger } from "../../../config/logger.js";
 import { streamJSONL } from "../../helpers/stream.js";
 
@@ -26,7 +26,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
         AGENT_MD_FILE : string,
     } {
         return {
-            AGENT_STORAGE_DIR : `/root/.claude/projects/workspace`,
+            AGENT_STORAGE_DIR : `/root/.claude/projects/-app`,
             WORKSPACE_DIR : `/workspace`,
             AGENT_PROFILE_DIR : `/workspace/.claude`,
             AGENT_MD_FILE : `/workspace/CLAUDE.md`,
@@ -289,10 +289,10 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
                     );
                 }
 
-                // Convert SDK message to StreamEvent
-                const streamEvent = this.parseStreamEvent(sdkMsg);
-                if (streamEvent) {
-                    yield streamEvent;
+                // Convert SDK message to StreamEvents and yield each one
+                const streamEvents = parseStreamEvent(sdkMsg);
+                for (const event of streamEvents) {
+                    yield event;
                 }
             }
 
@@ -347,167 +347,5 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
 
         return blocks;
     }
-
-    public parseStreamEvent(event: SDKMessage): StreamEvent | null {
-        // Determine which conversation this belongs to
-        const conversationId: 'main' | string =
-            event.type === 'stream_event' && event.parent_tool_use_id
-                ? event.parent_tool_use_id
-                : 'main';
-
-        // Handle streaming events (SDKPartialAssistantMessage)
-        if (event.type === 'stream_event') {
-            return this.parseRawStreamEvent(event.event, conversationId);
-        }
-
-        // Handle result messages (final metadata)
-        if (event.type === 'result' && event.subtype === 'success') {
-            return {
-                type: 'metadata_update',
-                conversationId,
-                metadata: {
-                    usage: {
-                        inputTokens: event.usage.input_tokens,
-                        outputTokens: event.usage.output_tokens,
-                        cacheReadTokens: event.usage.cache_read_input_tokens,
-                        cacheWriteTokens: event.usage.cache_creation_input_tokens,
-                        totalTokens: event.usage.input_tokens + event.usage.output_tokens,
-                    },
-                    costUSD: event.total_cost_usd,
-                },
-            };
-        }
-
-        // Handle tool progress messages
-        if (event.type === 'tool_progress') {
-            return {
-                type: 'block_update',
-                blockId: event.tool_use_id,
-                conversationId: event.parent_tool_use_id || 'main',
-                updates: {
-                    status: 'running',
-                } as any,
-            };
-        }
-
-        // For other message types, no streaming event needed
-        return null;
-    }
-
-    /**
-     * Parse Anthropic SDK RawMessageStreamEvent to StreamEvent
-     */
-    private parseRawStreamEvent(rawEvent: any, conversationId: 'main' | string): StreamEvent | null {
-        switch (rawEvent.type) {
-            case 'content_block_start': {
-                const block = rawEvent.content_block;
-                // const index = rawEvent.index; // Not needed for block start
-
-                // Create appropriate block based on content type
-                if (block.type === 'text') {
-                    return {
-                        type: 'block_start',
-                        conversationId,
-                        block: {
-                            type: 'assistant_text',
-                            id: block.id,
-                            timestamp: new Date().toISOString(),
-                            content: block.text || '',
-                        },
-                    };
-                } else if (block.type === 'tool_use') {
-                    return {
-                        type: 'block_start',
-                        conversationId,
-                        block: {
-                            type: 'tool_use',
-                            id: block.id,
-                            timestamp: new Date().toISOString(),
-                            toolName: block.name,
-                            toolUseId: block.id,
-                            input: block.input || {},
-                            status: 'pending',
-                        },
-                    };
-                } else if (block.type === 'thinking') {
-                    return {
-                        type: 'block_start',
-                        conversationId,
-                        block: {
-                            type: 'thinking',
-                            id: block.id,
-                            timestamp: new Date().toISOString(),
-                            content: '',
-                        },
-                    };
-                }
-                return null;
-            }
-
-            case 'content_block_delta': {
-                const delta = rawEvent.delta;
-                // const index = rawEvent.index; // Not needed for delta
-
-                if (delta.type === 'text_delta') {
-                    return {
-                        type: 'text_delta',
-                        blockId: '', // Will be set by the caller based on index
-                        conversationId,
-                        delta: delta.text,
-                    };
-                } else if (delta.type === 'input_json_delta') {
-                    // Tool input is being streamed
-                    // We don't emit deltas for tool input, just wait for complete
-                    return null;
-                } else if (delta.type === 'thinking_delta') {
-                    return {
-                        type: 'text_delta',
-                        blockId: '', // Will be set by the caller based on index
-                        conversationId,
-                        delta: (delta as any).thinking || '',
-                    };
-                }
-                return null;
-            }
-
-            case 'content_block_stop': {
-                // const index = rawEvent.index; // Not needed for block stop
-                // Block is complete - but we need the full block data
-                // This is handled by tracking blocks in the session
-                return null; // Will emit block_complete when we have full data
-            }
-
-            case 'message_start': {
-                // Message starting - no action needed
-                return null;
-            }
-
-            case 'message_delta': {
-                // Message metadata update (usage, stop_reason, etc.)
-                const usage = rawEvent.usage;
-                if (usage) {
-                    return {
-                        type: 'metadata_update',
-                        conversationId,
-                        metadata: {
-                            usage: {
-                                inputTokens: usage.input_tokens || 0,
-                                outputTokens: usage.output_tokens || 0,
-                                totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
-                            },
-                        },
-                    };
-                }
-                return null;
-            }
-
-            case 'message_stop': {
-                // Message complete - final event
-                return null;
-            }
-
-            default:
-                return null;
-        }
-    }
+   
 }

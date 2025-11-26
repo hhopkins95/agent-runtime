@@ -14,6 +14,75 @@ import type {
   SubagentBlock,
 } from '../../../types/session/blocks.js';
 import { logger } from '../../../config/logger.js';
+import { StreamEvent } from '../../../types/session/streamEvents.js';
+
+
+
+export function parseStreamEvent(event: SDKMessage): StreamEvent[] {
+  // Determine which conversation this belongs to
+  const conversationId: 'main' | string =
+    event.type === 'stream_event' && event.parent_tool_use_id
+      ? event.parent_tool_use_id
+      : 'main';
+
+  // Handle streaming events (SDKPartialAssistantMessage)
+  if (event.type === 'stream_event') {
+    const streamEvent = parseRawStreamEvent(event.event, conversationId);
+    return streamEvent ? [streamEvent] : [];
+  }
+
+  // Handle result messages (final metadata)
+  if (event.type === 'result' && event.subtype === 'success') {
+    const metadataEvent: StreamEvent = {
+      type: 'metadata_update',
+      conversationId,
+      metadata: {
+        usage: {
+          inputTokens: event.usage.input_tokens,
+          outputTokens: event.usage.output_tokens,
+          cacheReadTokens: event.usage.cache_read_input_tokens,
+          cacheWriteTokens: event.usage.cache_creation_input_tokens,
+          totalTokens: event.usage.input_tokens + event.usage.output_tokens,
+        },
+        costUSD: event.total_cost_usd,
+      },
+    };
+
+    // Also emit result as a system block
+    const blocks = sdkMessageToBlocks(event);
+    const blockEvents: StreamEvent[] = blocks.map((block) => ({
+      type: 'block_complete' as const,
+      blockId: block.id,
+      block,
+      conversationId,
+    }));
+
+    return [metadataEvent, ...blockEvents];
+  }
+
+  // Handle tool progress messages
+  if (event.type === 'tool_progress') {
+    return [{
+      type: 'block_update',
+      blockId: event.tool_use_id,
+      conversationId: event.parent_tool_use_id || 'main',
+      updates: {
+        status: 'running',
+      } as any,
+    }];
+  }
+
+  // For other message types (user, assistant, system, auth_status, etc.)
+  // Convert to blocks and emit block_complete events
+  const blocks = sdkMessageToBlocks(event);
+  return blocks.map((block) => ({
+    type: 'block_complete' as const,
+    blockId: block.id,
+    block,
+    conversationId,
+  }));
+}
+
 
 /**
  * Convert an SDK message to a ConversationBlock
@@ -274,6 +343,125 @@ function convertAuthStatus(
     },
   }];
 }
+
+
+/**
+    * Parse Anthropic SDK RawMessageStreamEvent to StreamEvent
+    */
+function parseRawStreamEvent(rawEvent: any, conversationId: 'main' | string): StreamEvent | null {
+  switch (rawEvent.type) {
+    case 'content_block_start': {
+      const block = rawEvent.content_block;
+      // const index = rawEvent.index; // Not needed for block start
+
+      // Create appropriate block based on content type
+      if (block.type === 'text') {
+        return {
+          type: 'block_start',
+          conversationId,
+          block: {
+            type: 'assistant_text',
+            id: block.id,
+            timestamp: new Date().toISOString(),
+            content: block.text || '',
+          },
+        };
+      } else if (block.type === 'tool_use') {
+        return {
+          type: 'block_start',
+          conversationId,
+          block: {
+            type: 'tool_use',
+            id: block.id,
+            timestamp: new Date().toISOString(),
+            toolName: block.name,
+            toolUseId: block.id,
+            input: block.input || {},
+            status: 'pending',
+          },
+        };
+      } else if (block.type === 'thinking') {
+        return {
+          type: 'block_start',
+          conversationId,
+          block: {
+            type: 'thinking',
+            id: block.id,
+            timestamp: new Date().toISOString(),
+            content: '',
+          },
+        };
+      }
+      return null;
+    }
+
+    case 'content_block_delta': {
+      const delta = rawEvent.delta;
+      // const index = rawEvent.index; // Not needed for delta
+
+      if (delta.type === 'text_delta') {
+        return {
+          type: 'text_delta',
+          blockId: '', // Will be set by the caller based on index
+          conversationId,
+          delta: delta.text,
+        };
+      } else if (delta.type === 'input_json_delta') {
+        // Tool input is being streamed
+        // We don't emit deltas for tool input, just wait for complete
+        return null;
+      } else if (delta.type === 'thinking_delta') {
+        return {
+          type: 'text_delta',
+          blockId: '', // Will be set by the caller based on index
+          conversationId,
+          delta: (delta as any).thinking || '',
+        };
+      }
+      return null;
+    }
+
+    case 'content_block_stop': {
+      // const index = rawEvent.index; // Not needed for block stop
+      // Block is complete - but we need the full block data
+      // This is handled by tracking blocks in the session
+      return null; // Will emit block_complete when we have full data
+    }
+
+    case 'message_start': {
+      // Message starting - no action needed
+      return null;
+    }
+
+    case 'message_delta': {
+      // Message metadata update (usage, stop_reason, etc.)
+      const usage = rawEvent.usage;
+      if (usage) {
+        return {
+          type: 'metadata_update',
+          conversationId,
+          metadata: {
+            usage: {
+              inputTokens: usage.input_tokens || 0,
+              outputTokens: usage.output_tokens || 0,
+              totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
+            },
+          },
+        };
+      }
+      return null;
+    }
+
+    case 'message_stop': {
+      // Message complete - final event
+      return null;
+    }
+
+    default:
+      return null;
+  }
+}
+
 
 /**
  * Extract tool results from user messages

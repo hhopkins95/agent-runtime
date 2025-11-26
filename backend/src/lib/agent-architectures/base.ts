@@ -42,12 +42,4 @@ export interface AgentArchitectureAdapter<NativeStreamEventType = any> {
     parseTranscripts : (rawTranscript : string, subagents : {id : string, transcript : string}[]) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}, 
 
 
-    /**
-     * Parses the native stream event into a stream event.
-     * @param event - The native stream event emitted by the agent architecture. ie 'SDKMessage' or 'GeminiMessageRecord'
-     * @returns StreamEvent or null if the event doesn't map to a stream event
-     */
-    parseStreamEvent : (event : NativeStreamEventType) => StreamEvent | null
-
-
 }
