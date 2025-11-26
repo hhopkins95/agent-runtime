@@ -20,22 +20,17 @@ import { StreamEvent } from '../../../types/session/streamEvents.js';
 
 
 export function convertMessagesToBlocks(messages: SDKMessage[]): ConversationBlock[] {
-        const blocks: ConversationBlock[] = [];
+  const blocks: ConversationBlock[] = [];
 
-        for (const msg of messages) {
-            // First check if this is a user message with tool results
-            if (msg.type === 'user' && msg.isSynthetic) {
-                const toolResults = extractToolResultBlocks(msg);
-                blocks.push(...toolResults);
-            }
+  for (const msg of messages) {
+    // Convert the message to blocks
+    // Note: convertUserMessage now handles tool results internally
+    const convertedBlocks = sdkMessageToBlocks(msg);
+    blocks.push(...convertedBlocks);
+  }
 
-            // Convert the message to blocks
-            const convertedBlocks = sdkMessageToBlocks(msg);
-            blocks.push(...convertedBlocks);
-        }
-
-        return blocks;
-    }
+  return blocks;
+}
    
 
 
@@ -115,7 +110,7 @@ export function sdkMessageToBlocks(msg: SDKMessage): ConversationBlock[] {
   try {
     switch (msg.type) {
       case 'user':
-        return [convertUserMessage(msg)];
+        return convertUserMessage(msg);
 
       case 'assistant':
         return convertAssistantMessage(msg);
@@ -167,18 +162,77 @@ export function sdkMessagesToBlocks(messages: SDKMessage[]): ConversationBlock[]
 }
 
 /**
- * Convert SDK user message to UserMessageBlock
+ * Convert SDK user message to blocks
+ *
+ * Handles two cases:
+ * 1. Real user messages (content is string) → UserMessageBlock
+ * 2. Tool results (content is array with tool_result blocks) → ToolResultBlock or SubagentBlock
  */
-function convertUserMessage(msg: Extract<SDKMessage, { type: 'user' }>): UserMessageBlock {
-  // Extract text content from APIUserMessage
-  const content = extractUserMessageContent(msg.message);
+function convertUserMessage(msg: Extract<SDKMessage, { type: 'user' }>): ConversationBlock[] {
+  const content = msg.message.content;
 
-  return {
+  // Tool result messages have content as array with tool_result blocks
+  if (Array.isArray(content) && content.some((b: any) => b.type === 'tool_result')) {
+    const blocks: ConversationBlock[] = [];
+
+    for (const block of content) {
+      if ((block as any).type === 'tool_result') {
+        const toolResultBlock = block as any;
+        const toolUseResult = (msg as any).toolUseResult;
+
+        if (toolUseResult?.agentId) {
+          // Task tool result → SubagentBlock
+          blocks.push({
+            type: 'subagent',
+            id: generateId(),
+            timestamp: new Date().toISOString(),
+            subagentId: `agent-${toolUseResult.agentId}`,
+            name: toolUseResult.subagent_type,
+            input: toolUseResult.prompt || '',
+            status: toolUseResult.status === 'completed' ? 'success' : 'error',
+            output: extractTextFromToolResultContent(toolUseResult.content),
+            durationMs: toolUseResult.totalDurationMs,
+            toolUseId: toolResultBlock.tool_use_id,
+          });
+        } else {
+          // Regular tool result → ToolResultBlock
+          blocks.push({
+            type: 'tool_result',
+            id: generateId(),
+            timestamp: new Date().toISOString(),
+            toolUseId: toolResultBlock.tool_use_id,
+            output: toolResultBlock.content,
+            isError: toolResultBlock.is_error || false,
+          });
+        }
+      }
+    }
+
+    return blocks;
+  }
+
+  // Real user message (content is string)
+  return [{
     type: 'user_message',
     id: msg.uuid || generateId(),
     timestamp: new Date().toISOString(),
-    content,
-  };
+    content: extractUserMessageContent(msg.message),
+  }];
+}
+
+/**
+ * Extract text content from tool result content array
+ */
+function extractTextFromToolResultContent(content: any): string | undefined {
+  if (!content) return undefined;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((b: any) => b.type === 'text')
+      .map((b: any) => b.text)
+      .join('\n');
+  }
+  return undefined;
 }
 
 /**
