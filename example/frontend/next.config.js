@@ -10,7 +10,8 @@ const nextConfig = {
         managedPaths: [],
       };
       // Add 'development' condition for conditional exports
-      config.resolve.conditionNames = ['development', ...config.resolve.conditionNames];
+      const defaultConditions = config.resolve.conditionNames || ['import', 'module', 'require', 'node', 'default'];
+      config.resolve.conditionNames = ['development', ...defaultConditions];
     }
     return config;
   },
