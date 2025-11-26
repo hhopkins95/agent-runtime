@@ -18,6 +18,27 @@ import { StreamEvent } from '../../../types/session/streamEvents.js';
 
 
 
+
+export function convertMessagesToBlocks(messages: SDKMessage[]): ConversationBlock[] {
+        const blocks: ConversationBlock[] = [];
+
+        for (const msg of messages) {
+            // First check if this is a user message with tool results
+            if (msg.type === 'user' && msg.isSynthetic) {
+                const toolResults = extractToolResultBlocks(msg);
+                blocks.push(...toolResults);
+            }
+
+            // Convert the message to blocks
+            const convertedBlocks = sdkMessageToBlocks(msg);
+            blocks.push(...convertedBlocks);
+        }
+
+        return blocks;
+    }
+   
+
+
 export function parseStreamEvent(event: SDKMessage): StreamEvent[] {
   // Determine which conversation this belongs to
   const conversationId: 'main' | string =

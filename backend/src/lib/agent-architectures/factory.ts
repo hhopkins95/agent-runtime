@@ -11,3 +11,13 @@ export const getAgentArchitectureAdapter = (architecture : AGENT_ARCHITECTURE_TY
             return new GeminiCLIAdapter(sandbox, sessionId);
     }
 }
+
+
+export const getArchitectureParser = (architecture : AGENT_ARCHITECTURE_TYPE) => {
+    switch (architecture) {
+        case "claude-agent-sdk":
+            return ClaudeSDKAdapter.parseTranscripts;
+        case "gemini-cli":
+            throw new Error("Gemini CLI is not supported yet");
+    }
+}

@@ -5,7 +5,7 @@ import { StreamEvent } from "../../../types/session/streamEvents.js";
 import { SandboxPrimitive } from "../../sandbox/base.js";
 import { ConversationBlock } from "../../../types/session/blocks.js";
 import { parseClaudeTranscriptFile } from "./claude-transcript-parser.js";
-import { sdkMessageToBlocks, extractToolResultBlocks, parseStreamEvent } from "./block-converter.js";
+import { sdkMessageToBlocks, extractToolResultBlocks, parseStreamEvent, convertMessagesToBlocks } from "./block-converter.js";
 import { logger } from "../../../config/logger.js";
 import { streamJSONL } from "../../helpers/stream.js";
 
@@ -309,15 +309,15 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
         }
     }
 
-    public parseTranscripts(rawTranscript: string, subagents: {id: string, transcript: string}[]): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
+    public static parseTranscripts(rawTranscript: string, subagents: {id: string, transcript: string}[]): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
         // Parse main transcript
         const mainMessages = rawTranscript ? parseClaudeTranscriptFile(rawTranscript) : [];
-        const mainBlocks = this.convertMessagesToBlocks(mainMessages);
+        const mainBlocks = convertMessagesToBlocks(mainMessages);
 
         // Parse subagent transcripts
         const subagentBlocks = subagents.map((subagent) => {
             const messages = subagent.transcript ? parseClaudeTranscriptFile(subagent.transcript) : [];
-            const blocks = this.convertMessagesToBlocks(messages);
+            const blocks = convertMessagesToBlocks(messages);
             return {
                 id: subagent.id,
                 blocks,
@@ -330,25 +330,9 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
         };
     }
 
-    /**
-     * Convert SDK messages to ConversationBlocks with special handling for tool results
-     */
-    private convertMessagesToBlocks(messages: SDKMessage[]): ConversationBlock[] {
-        const blocks: ConversationBlock[] = [];
-
-        for (const msg of messages) {
-            // First check if this is a user message with tool results
-            if (msg.type === 'user' && msg.isSynthetic) {
-                const toolResults = extractToolResultBlocks(msg);
-                blocks.push(...toolResults);
-            }
-
-            // Convert the message to blocks
-            const convertedBlocks = sdkMessageToBlocks(msg);
-            blocks.push(...convertedBlocks);
-        }
-
-        return blocks;
+    public parseTranscripts(rawTranscript: string, subagents: {id: string, transcript: string}[]): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
+        return ClaudeSDKAdapter.parseTranscripts(rawTranscript, subagents);
     }
+
    
 }

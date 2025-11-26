@@ -39,7 +39,7 @@ export interface AgentArchitectureAdapter<NativeStreamEventType = any> {
      * @param rawTranscripts  - Stringified raw transcript blob from the agent application. Either the jsonl file for claude-agent-sdk or the json file for gemini-cli.
      * @returns 
      */
-    parseTranscripts : (rawTranscript : string, subagents : {id : string, transcript : string}[]) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}, 
+     parseTranscripts : (rawTranscript : string, subagents : {id : string, transcript : string}[]) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}, 
 
 
 }
