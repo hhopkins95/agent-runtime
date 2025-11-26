@@ -295,7 +295,6 @@ export class AgentSandbox {
 
     // Start file watcher process with --root flag
     const process = await this.sandbox.exec([
-      'npx',
       'tsx',
       '/app/file-watcher.ts',
       '--root',
@@ -342,7 +341,6 @@ export class AgentSandbox {
 
     // Start file watcher process with --root flag
     const process = await this.sandbox.exec([
-      'npx',
       'tsx',
       '/app/file-watcher.ts',
       '--root',

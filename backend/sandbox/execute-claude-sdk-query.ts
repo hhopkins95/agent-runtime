@@ -55,7 +55,7 @@ if (!process.env.ANTHROPIC_API_KEY) {
 async function executeQuery() {
   try {
     // Configure SDK options
-    const options : Options = {
+    let options : Options = {
       // Working directory
       cwd: cwd,
 
@@ -70,15 +70,6 @@ async function executeQuery() {
       maxBudgetUsd: 5.0,
 
 
-      // This is how we can start a new session with a specific session id
-      extraArgs: {
-        // 'session-id': newSessionId,
-      },
-
-      // Session management
-      // resume: resumeId,
-
-
       // Permission mode - accept edits but allow tool use
       permissionMode: 'acceptEdits' as PermissionMode,
 
@@ -87,6 +78,17 @@ async function executeQuery() {
         // convex: convexTools,
       },
     };
+
+
+    if (newSessionId) {
+      options.extraArgs = {
+        'session-id': newSessionId,
+      };
+    }
+
+    if (resumeId) {
+      options.resume = resumeId;
+    }
 
     console.log("Executing Prompt: " + prompt);
     console.log("Options: " + JSON.stringify(options));

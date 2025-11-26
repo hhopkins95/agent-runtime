@@ -235,7 +235,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
             const needsSessionCreation = !existingTranscript;
 
             // Build command arguments
-            const command = ['npx', 'tsx', '/app/execute-claude-sdk-query.ts', args.query];
+            const command = ['tsx', '/app/execute-claude-sdk-query.ts', args.query];
 
             if (needsSessionCreation) {
                 command.push('--session-id', this.sessionId);

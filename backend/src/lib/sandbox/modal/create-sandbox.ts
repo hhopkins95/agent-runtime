@@ -130,6 +130,7 @@ export async function createModalSandbox(
         // Install the Gemini CLI globally (executed directly by gemini agents)
         'RUN npm install -g @google/gemini-cli',
 
+        'RUN npm install -g tsx',
         // Set working directory to /workspace for SDK operations
         `WORKDIR ${workdir}`
       ])
