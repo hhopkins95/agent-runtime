@@ -9,6 +9,8 @@ const nextConfig = {
         ...config.snapshot,
         managedPaths: [],
       };
+      // Add 'development' condition for conditional exports
+      config.resolve.conditionNames = ['development', ...config.resolve.conditionNames];
     }
     return config;
   },

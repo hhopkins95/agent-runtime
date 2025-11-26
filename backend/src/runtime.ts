@@ -8,6 +8,7 @@
  * ```typescript
  * import { serve } from "@hono/node-server";
  * import { createAgentRuntime } from './runtime';
+ * 
  *
  * // Create and initialize runtime
  * const runtime = await createAgentRuntime({

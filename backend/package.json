@@ -8,10 +8,12 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "development": "./src/index.ts",
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
     "./types": {
+      "development": "./src/types/index.ts",
       "import": "./dist/types/index.js",
       "types": "./dist/types/index.d.ts"
     }

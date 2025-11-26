@@ -35,7 +35,6 @@ export type {
 
   // Adapter interfaces
   PersistenceAdapter,
-
   
   // Session types
   SessionListData,

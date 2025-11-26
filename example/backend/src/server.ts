@@ -160,3 +160,4 @@ function getRequestBody(req: any): Promise<string> {
 
 // Start the server
 main();
+console.log("STARTING EXAMPLE SERVEd");
