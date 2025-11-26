@@ -6,6 +6,7 @@ import { AgentChat } from "@/components/AgentChat";
 import { FileWorkspace } from "@/components/FileWorkspace";
 import { SubagentViewer } from "@/components/SubagentViewer";
 import { DebugPanel } from "@/components/DebugPanel";
+import { DebugEventList } from "@/components/DebugEventList";
 
 /**
  * Main dashboard page
@@ -110,8 +111,9 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Debug Panel */}
+      {/* Debug Panels */}
       <DebugPanel />
+      <DebugEventList />
 
       {/* Footer */}
       <footer className="fixed bottom-0 left-0 right-0 bg-white border-t py-2">

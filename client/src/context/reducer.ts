@@ -19,6 +19,19 @@ import type {
 } from '../types';
 
 // ============================================================================
+// Debug Event Types
+// ============================================================================
+
+export interface DebugEvent {
+  id: string;
+  timestamp: number;
+  eventName: string;
+  payload: unknown;
+}
+
+const MAX_EVENT_LOG_SIZE = 100;
+
+// ============================================================================
 // State Shape
 // ============================================================================
 
@@ -61,6 +74,9 @@ export interface AgentServiceState {
 
   // Global loading state
   isInitialized: boolean;
+
+  // Debug event log (newest first)
+  eventLog: DebugEvent[];
 }
 
 // ============================================================================
@@ -136,7 +152,11 @@ export type AgentServiceAction =
   // File Events
   | { type: 'FILE_CREATED'; sessionId: string; file: WorkspaceFile }
   | { type: 'FILE_MODIFIED'; sessionId: string; file: WorkspaceFile }
-  | { type: 'FILE_DELETED'; sessionId: string; path: string };
+  | { type: 'FILE_DELETED'; sessionId: string; path: string }
+
+  // Debug Events
+  | { type: 'EVENT_LOGGED'; eventName: string; payload: unknown }
+  | { type: 'EVENTS_CLEARED' };
 
 // ============================================================================
 // Initial State
@@ -147,6 +167,7 @@ export const initialState: AgentServiceState = {
   sessionList: [],
   activeSessionId: null,
   isInitialized: false,
+  eventLog: [],
 };
 
 // ============================================================================
@@ -545,6 +566,33 @@ export function agentServiceReducer(
       });
 
       return { ...state, sessions };
+    }
+
+    case 'EVENT_LOGGED': {
+      const newEvent: DebugEvent = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        timestamp: Date.now(),
+        eventName: action.eventName,
+        payload: action.payload,
+      };
+
+      // Prepend new event, keep only the most recent MAX_EVENT_LOG_SIZE
+      const newEventLog = [newEvent, ...state.eventLog].slice(
+        0,
+        MAX_EVENT_LOG_SIZE
+      );
+
+      return {
+        ...state,
+        eventLog: newEventLog,
+      };
+    }
+
+    case 'EVENTS_CLEARED': {
+      return {
+        ...state,
+        eventLog: [],
+      };
     }
 
     default:

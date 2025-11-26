@@ -98,12 +98,14 @@ export function AgentServiceProvider({
     // Global Events
     wsManager.on('sessions:list', (sessions) => {
       logEvent('sessions:list', { count: sessions.length });
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'sessions:list', payload: { count: sessions.length } });
       dispatch({ type: 'SESSIONS_LIST_UPDATED', sessions });
     });
 
     // Block Streaming Events
     wsManager.on('session:block:start', (data) => {
       logEvent('session:block:start', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:block:start', payload: data });
       dispatch({
         type: 'BLOCK_STARTED',
         sessionId: data.sessionId,
@@ -117,6 +119,7 @@ export function AgentServiceProvider({
       if (debug) {
         console.log(`[WS Event] session:block:delta (blockId: ${data.blockId}, +${data.delta.length} chars)`);
       }
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:block:delta', payload: { ...data, delta: `[${data.delta.length} chars]` } });
       dispatch({
         type: 'BLOCK_DELTA',
         sessionId: data.sessionId,
@@ -128,6 +131,7 @@ export function AgentServiceProvider({
 
     wsManager.on('session:block:update', (data) => {
       logEvent('session:block:update', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:block:update', payload: data });
       dispatch({
         type: 'BLOCK_UPDATED',
         sessionId: data.sessionId,
@@ -139,6 +143,7 @@ export function AgentServiceProvider({
 
     wsManager.on('session:block:complete', (data) => {
       logEvent('session:block:complete', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:block:complete', payload: data });
       dispatch({
         type: 'BLOCK_COMPLETED',
         sessionId: data.sessionId,
@@ -150,6 +155,7 @@ export function AgentServiceProvider({
 
     wsManager.on('session:metadata:update', (data) => {
       logEvent('session:metadata:update', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:metadata:update', payload: data });
       dispatch({
         type: 'METADATA_UPDATED',
         sessionId: data.sessionId,
@@ -161,6 +167,7 @@ export function AgentServiceProvider({
     // Subagent Events
     wsManager.on('session:subagent:discovered', (data) => {
       logEvent('session:subagent:discovered', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:subagent:discovered', payload: data });
       dispatch({
         type: 'SUBAGENT_DISCOVERED',
         sessionId: data.sessionId,
@@ -170,6 +177,7 @@ export function AgentServiceProvider({
 
     wsManager.on('session:subagent:completed', (data) => {
       logEvent('session:subagent:completed', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:subagent:completed', payload: data });
       dispatch({
         type: 'SUBAGENT_COMPLETED',
         sessionId: data.sessionId,
@@ -181,6 +189,7 @@ export function AgentServiceProvider({
     // File Events
     wsManager.on('session:file:created', (data) => {
       logEvent('session:file:created', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:file:created', payload: { sessionId: data.sessionId, path: data.file.path } });
       dispatch({
         type: 'FILE_CREATED',
         sessionId: data.sessionId,
@@ -190,6 +199,7 @@ export function AgentServiceProvider({
 
     wsManager.on('session:file:modified', (data) => {
       logEvent('session:file:modified', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:file:modified', payload: { sessionId: data.sessionId, path: data.file.path } });
       dispatch({
         type: 'FILE_MODIFIED',
         sessionId: data.sessionId,
@@ -199,6 +209,7 @@ export function AgentServiceProvider({
 
     wsManager.on('session:file:deleted', (data) => {
       logEvent('session:file:deleted', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:file:deleted', payload: data });
       dispatch({
         type: 'FILE_DELETED',
         sessionId: data.sessionId,
@@ -209,6 +220,7 @@ export function AgentServiceProvider({
     // Session Status Events
     wsManager.on('session:status', (data) => {
       logEvent('session:status', data);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'session:status', payload: data });
       dispatch({
         type: 'SESSION_STATUS_CHANGED',
         sessionId: data.sessionId,
@@ -219,6 +231,7 @@ export function AgentServiceProvider({
     // Error Events
     wsManager.on('error', (error) => {
       console.error('[AgentService] WebSocket error:', error);
+      dispatch({ type: 'EVENT_LOGGED', eventName: 'error', payload: error });
     });
 
     // Cleanup: Remove all listeners on unmount

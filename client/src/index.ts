@@ -32,12 +32,14 @@ export { useAgentSession } from './hooks/useAgentSession';
 export { useMessages } from './hooks/useMessages';
 export { useWorkspaceFiles } from './hooks/useWorkspaceFiles';
 export { useSubagents } from './hooks/useSubagents';
+export { useEvents } from './hooks/useEvents';
 
 export type { UseSessionListResult } from './hooks/useSessionList';
 export type { UseAgentSessionResult } from './hooks/useAgentSession';
 export type { UseMessagesResult } from './hooks/useMessages';
 export type { UseWorkspaceFilesResult } from './hooks/useWorkspaceFiles';
 export type { UseSubagentsResult, SubagentInfo } from './hooks/useSubagents';
+export type { UseEventsResult } from './hooks/useEvents';
 
 // Client Classes (for advanced usage)
 export { RestClient } from './client/rest';
@@ -49,6 +51,7 @@ export type {
   AgentServiceState,
   AgentServiceAction,
   SessionState,
+  DebugEvent,
 } from './context/reducer';
 
 // Types
