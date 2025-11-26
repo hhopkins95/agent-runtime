@@ -26,7 +26,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
         AGENT_MD_FILE : string,
     } {
         return {
-            AGENT_STORAGE_DIR : `/root/.claude/projects/-app`,
+            AGENT_STORAGE_DIR : `/root/.claude/projects/-workspace`,
             WORKSPACE_DIR : `/workspace`,
             AGENT_PROFILE_DIR : `/workspace/.claude`,
             AGENT_MD_FILE : `/workspace/CLAUDE.md`,
@@ -179,9 +179,12 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
         // Ensure the storage directory exists
         await this.sandbox.createDirectory(paths.AGENT_STORAGE_DIR);
 
+
+        if (args.mainTranscript) {
         // Write main transcript
         const mainTranscriptPath = `${paths.AGENT_STORAGE_DIR}/${args.sessionId}.jsonl`;
         await this.sandbox.writeFile(mainTranscriptPath, args.mainTranscript);
+        }
 
         // Write subagent transcripts
         for (const subagent of args.subagents) {

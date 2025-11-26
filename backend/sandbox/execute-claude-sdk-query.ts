@@ -32,6 +32,7 @@ const program = new Command()
   .argument('<prompt>', 'The user\'s message/prompt to send to the agent')
   .option('-r, --resume <sessionId>', 'Resume from existing session')
   .option('-s, --session-id <sessionId>', 'The session id to use. Only used if --resume is not provided')
+  .option('-c, --cwd <cwd>', 'The working directory to use. Default is /workspace')
   .parse();
 
 // Extract parsed arguments
@@ -39,6 +40,7 @@ const prompt = program.args[0];
 const options = program.opts();
 const resumeId = options.resume;
 const newSessionId = options.sessionId;
+const cwd = options.cwd || '/workspace';
 
 
 // Validate environment
@@ -55,7 +57,7 @@ async function executeQuery() {
     // Configure SDK options
     const options : Options = {
       // Working directory
-      // cwd: process.env.CLAUDE_CODE_CWD || '/workspace',
+      cwd: cwd,
 
       // Load .claude/ configurations
       settingSources: ['project', 'local'] as SettingSource[],
@@ -70,11 +72,11 @@ async function executeQuery() {
 
       // This is how we can start a new session with a specific session id
       extraArgs: {
-        'session-id': newSessionId,
+        // 'session-id': newSessionId,
       },
 
       // Session management
-      resume: resumeId,
+      // resume: resumeId,
 
 
       // Permission mode - accept edits but allow tool use
@@ -85,6 +87,9 @@ async function executeQuery() {
         // convex: convexTools,
       },
     };
+
+    console.log("Executing Prompt: " + prompt);
+    console.log("Options: " + JSON.stringify(options));
 
     // Create query generator
     const generator = query({
@@ -117,7 +122,7 @@ async function executeQuery() {
       timestamp: Date.now(),
     };
 
-    console.error("ERROR HERE" + JSON.stringify(errorMsg));
+    console.error("ERROR HERE" + JSON.stringify(error));
     process.exit(1);
   }
 }
