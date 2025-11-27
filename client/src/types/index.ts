@@ -79,12 +79,11 @@ export interface SessionMetadata {
 }
 
 /**
- * Streaming block state for in-progress content
- * Kept separate from finalized blocks to avoid race conditions
+ * Streaming content state for in-progress text
+ * Keyed by conversationId - accumulates all deltas for a conversation
+ * until block_complete arrives with finalized content
  */
-export interface StreamingBlock {
-  /** ID of the block being streamed */
-  blockId: string;
+export interface StreamingContent {
   /** Which conversation this belongs to ('main' or subagentId) */
   conversationId: 'main' | string;
   /** Accumulated content from deltas */
@@ -92,6 +91,11 @@ export interface StreamingBlock {
   /** When streaming started */
   startedAt: number;
 }
+
+/**
+ * @deprecated Use StreamingContent instead - now keyed by conversationId
+ */
+export type StreamingBlock = StreamingContent;
 
 /**
  * Subagent state including blocks and status

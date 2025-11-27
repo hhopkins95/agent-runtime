@@ -105,40 +105,38 @@ export function useMessages(sessionId: string): UseMessagesResult {
   const session = state.sessions.get(sessionId);
 
   // Merge streaming content into blocks for display
+  // Streaming is keyed by conversationId - append streaming content as a temporary block
   const mergedBlocks = useMemo(() => {
     if (!session) return [];
 
-    return session.blocks.map(block => {
-      // Only merge streaming content for main conversation blocks
-      const streamingBlock = session.streaming.get(block.id);
-      if (!streamingBlock || streamingBlock.conversationId !== 'main') {
-        return block;
-      }
+    const streamingContent = session.streaming.get('main');
 
-      // Only assistant_text and thinking blocks have streamable content
-      if (block.type === 'assistant_text' || block.type === 'thinking') {
-        return {
-          ...block,
-          content: streamingBlock.content,
-        };
-      }
+    // If actively streaming, append a temporary streaming block
+    if (streamingContent && streamingContent.content) {
+      return [
+        ...session.blocks,
+        {
+          type: 'assistant_text' as const,
+          id: 'streaming',
+          timestamp: new Date().toISOString(),
+          content: streamingContent.content,
+        },
+      ];
+    }
 
-      return block;
-    });
+    return session.blocks;
   }, [session?.blocks, session?.streaming]);
 
   // Get IDs of blocks that are currently streaming
+  // With conversationId-based streaming, return 'streaming' if main is active
   const streamingBlockIds = useMemo(() => {
     if (!session) return new Set<string>();
 
-    const ids = new Set<string>();
-    for (const [blockId, streamingBlock] of session.streaming) {
-      // Only include main conversation blocks
-      if (streamingBlock.conversationId === 'main') {
-        ids.add(blockId);
-      }
+    const streamingContent = session.streaming.get('main');
+    if (streamingContent && streamingContent.content) {
+      return new Set(['streaming']);
     }
-    return ids;
+    return new Set<string>();
   }, [session?.streaming]);
 
   const metadata = session?.metadata ?? {};

@@ -17,7 +17,7 @@ import type {
   ConversationBlock,
   WorkspaceFile,
   SessionMetadata,
-  StreamingBlock,
+  StreamingContent,
   SubagentState,
 } from '../types';
 
@@ -45,8 +45,8 @@ export interface SessionState {
   /** Finalized conversation blocks (main transcript) */
   blocks: ConversationBlock[];
 
-  /** Active streaming state for in-progress blocks */
-  streaming: Map<string, StreamingBlock>;
+  /** Active streaming state keyed by conversationId ('main' or subagentId) */
+  streaming: Map<string, StreamingContent>;
 
   /** Session-level metadata (tokens, cost, model) */
   metadata: SessionMetadata;
@@ -165,34 +165,6 @@ export const initialState: AgentServiceState = {
   isInitialized: false,
   eventLog: [],
 };
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Find which conversation a block belongs to based on streaming state
- */
-function findConversationIdForBlock(
-  session: SessionState,
-  blockId: string
-): 'main' | string | null {
-  const streamingBlock = session.streaming.get(blockId);
-  if (streamingBlock) {
-    return streamingBlock.conversationId;
-  }
-  // Check main blocks
-  if (session.blocks.some(b => b.id === blockId)) {
-    return 'main';
-  }
-  // Check subagent blocks
-  for (const [subagentId, subagent] of session.subagents) {
-    if (subagent.blocks.some(b => b.id === blockId)) {
-      return subagentId;
-    }
-  }
-  return null;
-}
 
 // ============================================================================
 // Reducer
@@ -337,45 +309,19 @@ export function agentServiceReducer(
 
       if (!session) return state;
 
-      // Add streaming entry
+      // Add/update streaming entry keyed by conversationId
+      // Don't add shell block to blocks - just track streaming content
       const streaming = new Map(session.streaming);
-      streaming.set(action.block.id, {
-        blockId: action.block.id,
+      streaming.set(action.conversationId, {
         conversationId: action.conversationId,
-        content: (action.block as { content?: string }).content ?? '',
+        content: '',
         startedAt: Date.now(),
       });
 
-      if (action.conversationId === 'main') {
-        // Add shell block to main conversation
-        sessions.set(action.sessionId, {
-          ...session,
-          blocks: [...session.blocks, action.block],
-          streaming,
-        });
-      } else {
-        // Add shell block to subagent conversation
-        const subagent = session.subagents.get(action.conversationId);
-        if (subagent) {
-          const newSubagents = new Map(session.subagents);
-          newSubagents.set(action.conversationId, {
-            ...subagent,
-            blocks: [...subagent.blocks, action.block],
-          });
-
-          sessions.set(action.sessionId, {
-            ...session,
-            subagents: newSubagents,
-            streaming,
-          });
-        } else {
-          // Subagent doesn't exist yet - just update streaming
-          sessions.set(action.sessionId, {
-            ...session,
-            streaming,
-          });
-        }
-      }
+      sessions.set(action.sessionId, {
+        ...session,
+        streaming,
+      });
 
       return { ...state, sessions };
     }
@@ -386,14 +332,14 @@ export function agentServiceReducer(
 
       if (!session) return state;
 
-      // Only update streaming state, not blocks
-      const streamingBlock = session.streaming.get(action.blockId);
-      if (!streamingBlock) return state;
+      // Lookup streaming content by conversationId (not blockId)
+      const streamingContent = session.streaming.get(action.conversationId);
+      if (!streamingContent) return state;
 
       const streaming = new Map(session.streaming);
-      streaming.set(action.blockId, {
-        ...streamingBlock,
-        content: streamingBlock.content + action.delta,
+      streaming.set(action.conversationId, {
+        ...streamingContent,
+        content: streamingContent.content + action.delta,
       });
 
       sessions.set(action.sessionId, {
@@ -410,33 +356,28 @@ export function agentServiceReducer(
 
       if (!session) return state;
 
-      // Find which conversation this block belongs to
-      const conversationId = action.conversationId || findConversationIdForBlock(session, action.blockId);
+      const conversationId = action.conversationId;
       if (!conversationId) return state;
 
-      // Remove from streaming
+      // Clear streaming for this conversation
       const streaming = new Map(session.streaming);
-      streaming.delete(action.blockId);
+      streaming.delete(conversationId);
 
       if (conversationId === 'main') {
-        // Replace shell block with final block
+        // Append the finalized block (no shell block to replace)
         sessions.set(action.sessionId, {
           ...session,
-          blocks: session.blocks.map((block) =>
-            block.id === action.blockId ? action.block : block
-          ),
+          blocks: [...session.blocks, action.block],
           streaming,
         });
       } else {
-        // Replace in subagent
+        // Append to subagent
         const subagent = session.subagents.get(conversationId);
         if (subagent) {
           const newSubagents = new Map(session.subagents);
           newSubagents.set(conversationId, {
             ...subagent,
-            blocks: subagent.blocks.map((block) =>
-              block.id === action.blockId ? action.block : block
-            ),
+            blocks: [...subagent.blocks, action.block],
           });
 
           sessions.set(action.sessionId, {
