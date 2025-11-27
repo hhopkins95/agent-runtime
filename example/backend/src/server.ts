@@ -80,6 +80,37 @@ async function main() {
         return;
       }
 
+      // Delete session endpoint - permanently deletes session from persistence
+      // This is an app-level operation handled by the example backend, not the runtime
+      const deleteMatch = req.url?.match(/^\/sessions\/([^/]+)$/);
+      if (deleteMatch && req.method === 'DELETE') {
+        const sessionId = deleteMatch[1];
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        try {
+          // First unload from runtime (if loaded)
+          const session = runtime.sessionManager.getSession(sessionId);
+          if (session) {
+            await runtime.sessionManager.unloadSession(sessionId);
+          }
+
+          // Delete from SQLite directly (app-level operation)
+          if (persistence instanceof SqlitePersistenceAdapter) {
+            persistence.deleteSession(sessionId);
+          }
+
+          res.statusCode = 200;
+          res.end(JSON.stringify({ success: true, sessionId }));
+        } catch (error) {
+          console.error('Failed to delete session:', error);
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: 'Failed to delete session' }));
+        }
+        return;
+      }
+
       // Use Hono's fetch handler
       const response = await restApp.fetch(
         new Request(`http://${req.headers.host}${req.url}`, {
@@ -118,7 +149,7 @@ async function main() {
       console.log(`  POST   /sessions/create`);
       console.log(`  GET    /sessions/:id`);
       console.log(`  POST   /sessions/:id/message`);
-      console.log(`  DELETE /sessions/:id`);
+      console.log(`  DELETE /sessions/:id (permanent deletion)`);
       console.log(`  GET    /sessions`);
       console.log(`  GET    /agent-profiles`);
       console.log(`  GET    /health`);

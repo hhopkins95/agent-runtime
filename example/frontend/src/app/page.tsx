@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { SessionList } from "@/components/SessionList";
+import { SessionHeader } from "@/components/SessionHeader";
 import { AgentChat } from "@/components/AgentChat";
 import { FileWorkspace } from "@/components/FileWorkspace";
 import { SubagentViewer } from "@/components/SubagentViewer";
+import { RawDataViewer } from "@/components/RawDataViewer";
 import { DebugPanel } from "@/components/DebugPanel";
 import { DebugEventList } from "@/components/DebugEventList";
 
@@ -19,7 +21,7 @@ import { DebugEventList } from "@/components/DebugEventList";
  */
 export default function HomePage() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"chat" | "files" | "subagents">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "files" | "subagents" | "raw">("chat");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -39,7 +41,7 @@ export default function HomePage() {
       <main className="max-w-screen-2xl mx-auto px-6 py-6">
         <div className="grid grid-cols-12 gap-6 h-[calc(100vh-140px)]">
           {/* Left Sidebar - Session List */}
-          <div className="col-span-3">
+          <div className="col-span-3 h-full">
             <SessionList
               currentSessionId={currentSessionId}
               onSessionSelect={setCurrentSessionId}
@@ -59,6 +61,12 @@ export default function HomePage() {
               </div>
             ) : (
               <>
+                {/* Session Header */}
+                <SessionHeader
+                  sessionId={currentSessionId}
+                  onDelete={() => setCurrentSessionId(null)}
+                />
+
                 {/* Tab Navigation */}
                 <div className="flex gap-2 mb-4">
                   <button
@@ -91,10 +99,20 @@ export default function HomePage() {
                   >
                     Subagents
                   </button>
+                  <button
+                    onClick={() => setActiveTab("raw")}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      activeTab === "raw"
+                        ? "bg-blue-500 text-white"
+                        : "bg-white text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    Raw Data
+                  </button>
                 </div>
 
                 {/* Tab Content */}
-                <div className="flex-1">
+                <div className="flex-1 min-h-0">
                   {activeTab === "chat" && (
                     <AgentChat sessionId={currentSessionId} />
                   )}
@@ -103,6 +121,9 @@ export default function HomePage() {
                   )}
                   {activeTab === "subagents" && (
                     <SubagentViewer sessionId={currentSessionId} />
+                  )}
+                  {activeTab === "raw" && (
+                    <RawDataViewer sessionId={currentSessionId} />
                   )}
                 </div>
               </>

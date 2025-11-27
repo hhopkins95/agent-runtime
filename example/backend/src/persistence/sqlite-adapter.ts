@@ -301,6 +301,20 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
     return JSON.parse(row.data) as AgentProfile;
   }
 
+  // ========================================
+  // App-Level Operations (not part of PersistenceAdapter interface)
+  // ========================================
+
+  /**
+   * Permanently delete a session and all associated data.
+   * This is an app-level operation, not part of the runtime's PersistenceAdapter interface.
+   */
+  deleteSession(sessionId: string): void {
+    this.db.prepare(`DELETE FROM workspace_files WHERE session_id = ?`).run(sessionId);
+    this.db.prepare(`DELETE FROM transcripts WHERE session_id = ?`).run(sessionId);
+    this.db.prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
+  }
+
   /**
    * Close the database connection.
    * Call this during graceful shutdown.

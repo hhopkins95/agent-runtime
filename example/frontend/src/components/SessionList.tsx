@@ -1,7 +1,7 @@
 "use client";
 
 import { useAgentSession, useSessionList } from "@hhopkins/agent-runtime-react";
-import type { SessionListItem, SandboxStatus } from "@hhopkins/agent-runtime-react";
+import type { SessionListItem } from "@hhopkins/agent-runtime-react";
 
 interface SessionListProps {
   currentSessionId: string | null;
