@@ -238,28 +238,11 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
     public async* executeQuery(args: {query: string}): AsyncGenerator<StreamEvent> {
         try {
             let time = Date.now();
-            console.log("Start Time: ", time / 1000);
 
 
-
-            logger.info({ sessionId: this.sessionId, queryLength: args.query.length }, 'Starting Claude SDK query execution');
-
-            // Determine if we need to create a new session or resume
-            const { main: existingTranscript } = await this.readSessionTranscripts({});
-            const needsSessionCreation = !existingTranscript;
-
-            logger.info(`Seconds to read session transcripts: ${(Date.now() - time) / 1000}`);
 
             // Build command arguments
-            const command = ['tsx', '/app/execute-claude-sdk-query.ts', args.query];
-
-            if (needsSessionCreation) {
-                command.push('--session-id', this.sessionId);
-                logger.debug({ sessionId: this.sessionId }, 'Creating new session with specific ID');
-            } else {
-                command.push('--resume', this.sessionId);
-                logger.debug({ sessionId: this.sessionId }, 'Resuming existing session');
-            }
+            const command = ['tsx', '/app/execute-claude-sdk-query.ts', args.query, '--session-id', this.sessionId];
 
             logger.debug({ command }, 'Executing Claude SDK command');
 
