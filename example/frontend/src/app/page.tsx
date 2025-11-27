@@ -7,7 +7,6 @@ import { AgentChat } from "@/components/AgentChat";
 import { FileWorkspace } from "@/components/FileWorkspace";
 import { SubagentViewer } from "@/components/SubagentViewer";
 import { RawDataViewer } from "@/components/RawDataViewer";
-import { DebugPanel } from "@/components/DebugPanel";
 import { DebugEventList } from "@/components/DebugEventList";
 
 /**
@@ -132,8 +131,7 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Debug Panels */}
-      <DebugPanel />
+      {/* Debug Event Viewer */}
       <DebugEventList />
 
       {/* Footer */}
