@@ -129,6 +129,7 @@ export function AgentServiceProvider({
       dispatch({
         type: 'STREAM_DELTA',
         sessionId: data.sessionId,
+        conversationId: data.conversationId,
         blockId: data.blockId,
         delta: data.delta,
       });
@@ -152,6 +153,7 @@ export function AgentServiceProvider({
       dispatch({
         type: 'STREAM_COMPLETED',
         sessionId: data.sessionId,
+        conversationId: data.conversationId,
         blockId: data.blockId,
         block: data.block,
       });

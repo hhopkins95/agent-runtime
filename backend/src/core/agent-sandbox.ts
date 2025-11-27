@@ -171,56 +171,6 @@ export class AgentSandbox {
     await this.architectureAdapter.setupAgentProfile({
       agentProfile: this.agentProfile,
     });
-    // const profile = this.agentProfile
-    // const paths = this.getSandboxPaths();
-
-    // // Set up the agent MD file
-    // if (profile.agentMDFile) {
-    //   await this.sandbox.writeFile(paths.AGENT_MD_FILE, profile.agentMDFile);
-    // }
-
-    // // Set up the Subagents (Claude only)
-    // if (profile.type === 'claude-agent-sdk' && profile.subagents && profile.subagents.length > 0) {
-    //   for (const subagent of profile.subagents) {
-    //     await this.sandbox.writeFile(`${paths.AGENT_PROFILE_DIR}/agents/${subagent.name}.md`, `
-    //      ---
-    //      name: ${subagent.name}
-    //      description: ${subagent.description}
-    //      ---
-
-    //      ${subagent.prompt} 
-    //       `);
-    //   }
-    // }
-
-    // // Set up the Commands 
-    // if (profile.commands && profile.commands.length > 0) {
-    //   for (const command of profile.commands) {
-    //     await this.sandbox.writeFile(`${paths.AGENT_PROFILE_DIR}/commands/${command.name}.md`, `
-    //       ${command.prompt}
-    //     `);
-    //   }
-    // }
-    // // Set up the skills 
-    // if (profile.skills && profile.skills.length > 0) {
-    //   for (const skill of profile.skills) {
-    //     // Write the skill file
-    //     await this.sandbox.writeFile(`${paths.AGENT_PROFILE_DIR}/skills/${skill.name}/SKILL.md`, `
-    //       ---
-    //       name: ${skill.name}
-    //       description: ${skill.description}
-    //       ---
-
-    //       ${skill.skillMd}
-    //     `);
-
-
-    //     for (const supportingFile of skill.supportingFiles) {
-    //       await this.sandbox.writeFile(`${paths.AGENT_PROFILE_DIR}/skills/${skill.name}/${supportingFile.relativePath}`, supportingFile.content);
-    //     }
-    //   }
-    // }
-
   }
 
   private async setupSessionTranscripts({
@@ -244,30 +194,6 @@ export class AgentSandbox {
         transcript: subagent.rawTranscript ?? '',
       })) ?? [],
     });
-    // if (!rawTranscript) return
-    // const paths = this.getSandboxPaths();
-
-    // if (this.agentProfile.type === 'claude-agent-sdk') {
-    //   const filename = `${sessionId}.jsonl`;
-    //   this.TRANSCRIPT_FILE_NAME = filename;
-    //   await this.sandbox.writeFile(`${paths.AGENT_STORAGE_DIR}/${filename}`, rawTranscript);
-    //   for (const subagent of subagents || []) {
-    //     if (!subagent.rawTranscript) continue;
-    //     await this.sandbox.writeFile(`${paths.AGENT_STORAGE_DIR}/${subagent.id}.jsonl`, subagent.rawTranscript);
-    //   }
-    // }
-
-    // if (this.agentProfile.type === 'gemini-cli') {
-    //   // example file name : session-2025-11-19T23-40-e677eecd.json 
-    //   const fileName = new Date().toISOString().replace(/[:.]/g, '-') + '-' + "aaaaaaaa" + '.json';
-    //   this.TRANSCRIPT_FILE_NAME = fileName;
-    //   await this.sandbox.writeFile(`${paths.AGENT_STORAGE_DIR}/${fileName}`, rawTranscript);
-    //   // No subagents for gemini-cli
-    // }
-
-
-
-
   }
 
   private async setupWorkspaceFiles(files: WorkspaceFile[]): Promise<void> {

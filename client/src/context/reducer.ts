@@ -104,12 +104,14 @@ export type AgentServiceAction =
   | {
       type: 'STREAM_DELTA';
       sessionId: string;
+      conversationId: string;
       blockId: string;
       delta: string;
     }
   | {
       type: 'STREAM_COMPLETED';
       sessionId: string;
+      conversationId: string;
       blockId: string;
       block: ConversationBlock;
     }
@@ -409,7 +411,7 @@ export function agentServiceReducer(
       if (!session) return state;
 
       // Find which conversation this block belongs to
-      const conversationId = findConversationIdForBlock(session, action.blockId);
+      const conversationId = action.conversationId || findConversationIdForBlock(session, action.blockId);
       if (!conversationId) return state;
 
       // Remove from streaming
