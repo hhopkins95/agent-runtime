@@ -56,12 +56,19 @@ export type {
 
 // Types
 export type {
-  // Architecture & Session
+  // Architecture & Session (new)
   AGENT_ARCHITECTURE_TYPE,
-  SessionStatus,
-  SessionListData,
+  SessionListItem,
+  SessionRuntimeState,
+  SandboxStatus,
   RuntimeSessionData,
   WorkspaceFile,
+  StreamingBlock,
+  SubagentState,
+
+  // Architecture & Session (deprecated)
+  SessionStatus,
+  SessionListData,
 
   // Content Types
   TextContent,

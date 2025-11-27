@@ -7,13 +7,13 @@
 
 import { useContext, useCallback } from 'react';
 import { AgentServiceContext } from '../context/AgentServiceContext';
-import type { SessionListData } from '../types';
+import type { SessionListItem } from '../types';
 
 export interface UseSessionListResult {
   /**
-   * Array of all sessions
+   * Array of all sessions with their runtime state
    */
-  sessions: SessionListData[];
+  sessions: SessionListItem[];
 
   /**
    * Whether the initial session list has been loaded
@@ -28,7 +28,7 @@ export interface UseSessionListResult {
   /**
    * Get a specific session by ID
    */
-  getSession: (sessionId: string) => SessionListData | undefined;
+  getSession: (sessionId: string) => SessionListItem | undefined;
 }
 
 /**

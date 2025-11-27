@@ -95,19 +95,25 @@ export function AgentServiceProvider({
       }
     };
 
+    // =========================================================================
     // Global Events
+    // =========================================================================
+
     wsManager.on('sessions:list', (sessions) => {
       logEvent('sessions:list', { count: sessions.length });
       dispatch({ type: 'EVENT_LOGGED', eventName: 'sessions:list', payload: { count: sessions.length } });
       dispatch({ type: 'SESSIONS_LIST_UPDATED', sessions });
     });
 
+    // =========================================================================
     // Block Streaming Events
+    // =========================================================================
+
     wsManager.on('session:block:start', (data) => {
       logEvent('session:block:start', data);
       dispatch({ type: 'EVENT_LOGGED', eventName: 'session:block:start', payload: data });
       dispatch({
-        type: 'BLOCK_STARTED',
+        type: 'STREAM_STARTED',
         sessionId: data.sessionId,
         conversationId: data.conversationId,
         block: data.block,
@@ -121,9 +127,8 @@ export function AgentServiceProvider({
       }
       dispatch({ type: 'EVENT_LOGGED', eventName: 'session:block:delta', payload: { ...data, delta: `[${data.delta.length} chars]` } });
       dispatch({
-        type: 'BLOCK_DELTA',
+        type: 'STREAM_DELTA',
         sessionId: data.sessionId,
-        conversationId: data.conversationId,
         blockId: data.blockId,
         delta: data.delta,
       });
@@ -145,9 +150,8 @@ export function AgentServiceProvider({
       logEvent('session:block:complete', data);
       dispatch({ type: 'EVENT_LOGGED', eventName: 'session:block:complete', payload: data });
       dispatch({
-        type: 'BLOCK_COMPLETED',
+        type: 'STREAM_COMPLETED',
         sessionId: data.sessionId,
-        conversationId: data.conversationId,
         blockId: data.blockId,
         block: data.block,
       });
@@ -164,7 +168,10 @@ export function AgentServiceProvider({
       });
     });
 
+    // =========================================================================
     // Subagent Events
+    // =========================================================================
+
     wsManager.on('session:subagent:discovered', (data) => {
       logEvent('session:subagent:discovered', data);
       dispatch({ type: 'EVENT_LOGGED', eventName: 'session:subagent:discovered', payload: data });
@@ -186,7 +193,10 @@ export function AgentServiceProvider({
       });
     });
 
+    // =========================================================================
     // File Events
+    // =========================================================================
+
     wsManager.on('session:file:created', (data) => {
       logEvent('session:file:created', data);
       dispatch({ type: 'EVENT_LOGGED', eventName: 'session:file:created', payload: { sessionId: data.sessionId, path: data.file.path } });
@@ -217,31 +227,24 @@ export function AgentServiceProvider({
       });
     });
 
-    // Session Status Events
+    // =========================================================================
+    // Session Lifecycle Events
+    // =========================================================================
+
     wsManager.on('session:status', (data) => {
       logEvent('session:status', data);
       dispatch({ type: 'EVENT_LOGGED', eventName: 'session:status', payload: data });
       dispatch({
-        type: 'SESSION_STATUS_CHANGED',
+        type: 'SESSION_RUNTIME_UPDATED',
         sessionId: data.sessionId,
-        status: data.status,
+        runtime: data.runtime,
       });
     });
 
-    // Sandbox Status Events
-    wsManager.on('sandbox:status', (data) => {
-      logEvent('sandbox:status', data);
-      dispatch({ type: 'EVENT_LOGGED', eventName: 'sandbox:status', payload: data });
-      dispatch({
-        type: 'SANDBOX_STATUS_UPDATED',
-        sessionId: data.sessionId,
-        sandboxId: data.sandboxId,
-        status: data.status,
-        restartCount: data.restartCount,
-      });
-    });
-
+    // =========================================================================
     // Error Events
+    // =========================================================================
+
     wsManager.on('error', (error) => {
       console.error('[AgentService] WebSocket error:', error);
       dispatch({ type: 'EVENT_LOGGED', eventName: 'error', payload: error });

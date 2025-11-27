@@ -9,18 +9,17 @@
 // Re-export Shared Types from Backend Runtime
 // ============================================================================
 
-import type {
-  AGENT_ARCHITECTURE_TYPE,
-  SessionStatus,
-} from '@hhopkins/agent-runtime/types';
-
 export type {
-  // Session types
+  // Session types (new)
   AGENT_ARCHITECTURE_TYPE,
-  SessionStatus,
   WorkspaceFile,
-  SessionListData,
   RuntimeSessionData,
+  SandboxStatus,
+  SessionRuntimeState,
+  SessionListItem,
+  // Session types (deprecated - use SessionListItem instead)
+  SessionStatus,
+  SessionListData,
   // Block types
   TextContent,
   ImageContent,
@@ -79,18 +78,43 @@ export interface SessionMetadata {
   [key: string]: unknown;
 }
 
+/**
+ * Streaming block state for in-progress content
+ * Kept separate from finalized blocks to avoid race conditions
+ */
+export interface StreamingBlock {
+  /** ID of the block being streamed */
+  blockId: string;
+  /** Which conversation this belongs to ('main' or subagentId) */
+  conversationId: 'main' | string;
+  /** Accumulated content from deltas */
+  content: string;
+  /** When streaming started */
+  startedAt: number;
+}
+
+/**
+ * Subagent state including blocks and status
+ */
+export interface SubagentState {
+  id: string;
+  blocks: import('@hhopkins/agent-runtime/types').ConversationBlock[];
+  status: 'running' | 'completed' | 'failed';
+  metadata: SessionMetadata;
+}
+
 // ============================================================================
 // REST API Request/Response Types
 // ============================================================================
 
 export interface CreateSessionRequest {
   agentProfileRef: string;
-  architecture: AGENT_ARCHITECTURE_TYPE;
+  architecture: import('@hhopkins/agent-runtime/types').AGENT_ARCHITECTURE_TYPE;
 }
 
 export interface CreateSessionResponse {
   sessionId: string;
-  status: SessionStatus;
+  runtime: import('@hhopkins/agent-runtime/types').SessionRuntimeState;
   createdAt: number;
 }
 

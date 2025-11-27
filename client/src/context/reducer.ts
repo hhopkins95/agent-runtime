@@ -4,18 +4,21 @@
  * Manages global state for all sessions including:
  * - Session list
  * - Conversation blocks
+ * - Streaming state (separate from finalized blocks)
  * - Workspace files
  * - Subagent conversations
  * - Metadata (tokens, cost)
  */
 
 import type {
-  SessionListData,
+  SessionListItem,
+  SessionRuntimeState,
   RuntimeSessionData,
   ConversationBlock,
   WorkspaceFile,
   SessionMetadata,
-  SessionStatus,
+  StreamingBlock,
+  SubagentState,
 } from '../types';
 
 // ============================================================================
@@ -36,53 +39,39 @@ const MAX_EVENT_LOG_SIZE = 100;
 // ============================================================================
 
 export interface SessionState {
-  // Session metadata
-  info: SessionListData;
+  /** Session info including runtime state */
+  info: SessionListItem;
 
-  // Main conversation
+  /** Finalized conversation blocks (main transcript) */
   blocks: ConversationBlock[];
+
+  /** Active streaming state for in-progress blocks */
+  streaming: Map<string, StreamingBlock>;
+
+  /** Session-level metadata (tokens, cost, model) */
   metadata: SessionMetadata;
 
-  // Workspace files
+  /** Workspace files tracked by the session */
   files: WorkspaceFile[];
 
-  // Subagents
-  subagents: Map<
-    string,
-    {
-      id: string;
-      blocks: ConversationBlock[];
-      metadata: SessionMetadata;
-      status?: 'running' | 'completed' | 'failed';
-    }
-  >;
+  /** Subagent conversations keyed by subagentId */
+  subagents: Map<string, SubagentState>;
 
-  // Sandbox status
-  sandboxStatus?: {
-    sandboxId: string;
-    status: 'healthy' | 'unhealthy' | 'terminated';
-    restartCount?: number;
-  };
-
-  // Loading states
+  /** Loading state for async operations */
   isLoading: boolean;
-  isStreaming: boolean;
 }
 
 export interface AgentServiceState {
-  // All sessions indexed by sessionId
+  /** Full session data indexed by sessionId */
   sessions: Map<string, SessionState>;
 
-  // Session list (lightweight)
-  sessionList: SessionListData[];
+  /** Lightweight session list for UI (session picker, etc.) */
+  sessionList: SessionListItem[];
 
-  // Currently focused session
-  activeSessionId: string | null;
-
-  // Global loading state
+  /** Whether initial data has been loaded */
   isInitialized: boolean;
 
-  // Debug event log (newest first)
+  /** Debug event log (newest first) */
   eventLog: DebugEvent[];
 }
 
@@ -92,47 +81,46 @@ export interface AgentServiceState {
 
 export type AgentServiceAction =
   // Initialization
-  | { type: 'INITIALIZE'; sessions: SessionListData[] }
+  | { type: 'INITIALIZE'; sessions: SessionListItem[] }
 
   // Session List
-  | { type: 'SESSIONS_LIST_UPDATED'; sessions: SessionListData[] }
+  | { type: 'SESSIONS_LIST_UPDATED'; sessions: SessionListItem[] }
 
   // Session CRUD
-  | { type: 'SESSION_CREATED'; session: SessionListData }
+  | { type: 'SESSION_CREATED'; session: SessionListItem }
   | { type: 'SESSION_LOADED'; sessionId: string; data: RuntimeSessionData }
   | { type: 'SESSION_DESTROYED'; sessionId: string }
-  | { type: 'SET_ACTIVE_SESSION'; sessionId: string | null }
 
-  // Session Status
-  | { type: 'SESSION_STATUS_CHANGED'; sessionId: string; status: SessionStatus }
+  // Session Runtime
+  | { type: 'SESSION_RUNTIME_UPDATED'; sessionId: string; runtime: SessionRuntimeState }
 
-  // Block Events
+  // Streaming Events
   | {
-      type: 'BLOCK_STARTED';
+      type: 'STREAM_STARTED';
       sessionId: string;
       conversationId: string;
       block: ConversationBlock;
     }
   | {
-      type: 'BLOCK_DELTA';
+      type: 'STREAM_DELTA';
       sessionId: string;
-      conversationId: string;
       blockId: string;
       delta: string;
     }
+  | {
+      type: 'STREAM_COMPLETED';
+      sessionId: string;
+      blockId: string;
+      block: ConversationBlock;
+    }
+
+  // Block Updates (non-streaming metadata changes)
   | {
       type: 'BLOCK_UPDATED';
       sessionId: string;
       conversationId: string;
       blockId: string;
       updates: Partial<ConversationBlock>;
-    }
-  | {
-      type: 'BLOCK_COMPLETED';
-      sessionId: string;
-      conversationId: string;
-      blockId: string;
-      block: ConversationBlock;
     }
 
   // Metadata
@@ -161,15 +149,6 @@ export type AgentServiceAction =
   | { type: 'FILE_MODIFIED'; sessionId: string; file: WorkspaceFile }
   | { type: 'FILE_DELETED'; sessionId: string; path: string }
 
-  // Sandbox Events
-  | {
-      type: 'SANDBOX_STATUS_UPDATED';
-      sessionId: string;
-      sandboxId: string;
-      status: 'healthy' | 'unhealthy' | 'terminated';
-      restartCount?: number;
-    }
-
   // Debug Events
   | { type: 'EVENT_LOGGED'; eventName: string; payload: unknown }
   | { type: 'EVENTS_CLEARED' };
@@ -181,10 +160,37 @@ export type AgentServiceAction =
 export const initialState: AgentServiceState = {
   sessions: new Map(),
   sessionList: [],
-  activeSessionId: null,
   isInitialized: false,
   eventLog: [],
 };
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Find which conversation a block belongs to based on streaming state
+ */
+function findConversationIdForBlock(
+  session: SessionState,
+  blockId: string
+): 'main' | string | null {
+  const streamingBlock = session.streaming.get(blockId);
+  if (streamingBlock) {
+    return streamingBlock.conversationId;
+  }
+  // Check main blocks
+  if (session.blocks.some(b => b.id === blockId)) {
+    return 'main';
+  }
+  // Check subagent blocks
+  for (const [subagentId, subagent] of session.subagents) {
+    if (subagent.blocks.some(b => b.id === blockId)) {
+      return subagentId;
+    }
+  }
+  return null;
+}
 
 // ============================================================================
 // Reducer
@@ -204,54 +210,67 @@ export function agentServiceReducer(
     }
 
     case 'SESSIONS_LIST_UPDATED': {
+      // Also update runtime state in loaded sessions
+      const sessions = new Map(state.sessions);
+      for (const sessionInfo of action.sessions) {
+        const existing = sessions.get(sessionInfo.sessionId);
+        if (existing) {
+          sessions.set(sessionInfo.sessionId, {
+            ...existing,
+            info: sessionInfo,
+          });
+        }
+      }
+
       return {
         ...state,
         sessionList: action.sessions,
+        sessions,
       };
     }
 
     case 'SESSION_CREATED': {
-      // Check if session already exists (from SESSIONS_LIST_UPDATED due to race condition)
+      // Check if session already exists (race condition with SESSIONS_LIST_UPDATED)
       const exists = state.sessionList.some(s => s.sessionId === action.session.sessionId);
 
-      const newState = {
-        ...state,
-        sessionList: exists
-          ? state.sessionList.map(s =>
-              s.sessionId === action.session.sessionId ? action.session : s
-            )
-          : [...state.sessionList, action.session],
-      };
+      const newSessionList = exists
+        ? state.sessionList.map(s =>
+            s.sessionId === action.session.sessionId ? action.session : s
+          )
+        : [...state.sessionList, action.session];
 
-      // Initialize or update session state
+      // Initialize session state
       const sessions = new Map(state.sessions);
       const existingSession = sessions.get(action.session.sessionId);
       sessions.set(action.session.sessionId, {
         info: action.session,
         blocks: existingSession?.blocks ?? [],
+        streaming: existingSession?.streaming ?? new Map(),
         metadata: existingSession?.metadata ?? {},
         files: existingSession?.files ?? [],
         subagents: existingSession?.subagents ?? new Map(),
         isLoading: existingSession?.isLoading ?? false,
-        isStreaming: existingSession?.isStreaming ?? false,
       });
 
-      newState.sessions = sessions;
-      return newState;
+      return {
+        ...state,
+        sessionList: newSessionList,
+        sessions,
+      };
     }
 
     case 'SESSION_LOADED': {
       const sessions = new Map(state.sessions);
-      const existing = sessions.get(action.sessionId);
 
       // Convert subagents array to Map
-      const subagentsMap = new Map(
+      const subagentsMap = new Map<string, SubagentState>(
         action.data.subagents.map((sub) => [
           sub.id,
           {
             id: sub.id,
             blocks: sub.blocks,
             metadata: {},
+            status: 'running' as const,
           },
         ])
       );
@@ -259,11 +278,11 @@ export function agentServiceReducer(
       sessions.set(action.sessionId, {
         info: action.data,
         blocks: action.data.blocks,
+        streaming: new Map(),
         metadata: {},
         files: action.data.workspaceFiles,
         subagents: subagentsMap,
         isLoading: false,
-        isStreaming: existing?.isStreaming ?? false,
       });
 
       return {
@@ -282,21 +301,10 @@ export function agentServiceReducer(
         sessionList: state.sessionList.filter(
           (s) => s.sessionId !== action.sessionId
         ),
-        activeSessionId:
-          state.activeSessionId === action.sessionId
-            ? null
-            : state.activeSessionId,
       };
     }
 
-    case 'SET_ACTIVE_SESSION': {
-      return {
-        ...state,
-        activeSessionId: action.sessionId,
-      };
-    }
-
-    case 'SESSION_STATUS_CHANGED': {
+    case 'SESSION_RUNTIME_UPDATED': {
       const sessions = new Map(state.sessions);
       const session = sessions.get(action.sessionId);
 
@@ -305,7 +313,7 @@ export function agentServiceReducer(
           ...session,
           info: {
             ...session.info,
-            status: action.status,
+            runtime: action.runtime,
           },
         });
       }
@@ -315,27 +323,36 @@ export function agentServiceReducer(
         sessions,
         sessionList: state.sessionList.map((s) =>
           s.sessionId === action.sessionId
-            ? { ...s, status: action.status }
+            ? { ...s, runtime: action.runtime }
             : s
         ),
       };
     }
 
-    case 'BLOCK_STARTED': {
+    case 'STREAM_STARTED': {
       const sessions = new Map(state.sessions);
       const session = sessions.get(action.sessionId);
 
       if (!session) return state;
 
+      // Add streaming entry
+      const streaming = new Map(session.streaming);
+      streaming.set(action.block.id, {
+        blockId: action.block.id,
+        conversationId: action.conversationId,
+        content: (action.block as { content?: string }).content ?? '',
+        startedAt: Date.now(),
+      });
+
       if (action.conversationId === 'main') {
-        // Main conversation
+        // Add shell block to main conversation
         sessions.set(action.sessionId, {
           ...session,
           blocks: [...session.blocks, action.block],
-          isStreaming: true,
+          streaming,
         });
       } else {
-        // Subagent conversation
+        // Add shell block to subagent conversation
         const subagent = session.subagents.get(action.conversationId);
         if (subagent) {
           const newSubagents = new Map(session.subagents);
@@ -347,7 +364,13 @@ export function agentServiceReducer(
           sessions.set(action.sessionId, {
             ...session,
             subagents: newSubagents,
-            isStreaming: true,
+            streaming,
+          });
+        } else {
+          // Subagent doesn't exist yet - just update streaming
+          sessions.set(action.sessionId, {
+            ...session,
+            streaming,
           });
         }
       }
@@ -355,49 +378,69 @@ export function agentServiceReducer(
       return { ...state, sessions };
     }
 
-    case 'BLOCK_DELTA': {
+    case 'STREAM_DELTA': {
       const sessions = new Map(state.sessions);
       const session = sessions.get(action.sessionId);
 
       if (!session) return state;
 
-      const updateBlocks = (blocks: ConversationBlock[]): ConversationBlock[] =>
-        blocks.map((block) => {
-          if (block.id === action.blockId) {
-            // Only update text content for assistant_text and thinking blocks
-            if (block.type === 'assistant_text') {
-              return {
-                ...block,
-                content: block.content + action.delta,
-              };
-            }
-            if (block.type === 'thinking') {
-              return {
-                ...block,
-                content: block.content + action.delta,
-              };
-            }
-          }
-          return block;
-        });
+      // Only update streaming state, not blocks
+      const streamingBlock = session.streaming.get(action.blockId);
+      if (!streamingBlock) return state;
 
-      if (action.conversationId === 'main') {
+      const streaming = new Map(session.streaming);
+      streaming.set(action.blockId, {
+        ...streamingBlock,
+        content: streamingBlock.content + action.delta,
+      });
+
+      sessions.set(action.sessionId, {
+        ...session,
+        streaming,
+      });
+
+      return { ...state, sessions };
+    }
+
+    case 'STREAM_COMPLETED': {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get(action.sessionId);
+
+      if (!session) return state;
+
+      // Find which conversation this block belongs to
+      const conversationId = findConversationIdForBlock(session, action.blockId);
+      if (!conversationId) return state;
+
+      // Remove from streaming
+      const streaming = new Map(session.streaming);
+      streaming.delete(action.blockId);
+
+      if (conversationId === 'main') {
+        // Replace shell block with final block
         sessions.set(action.sessionId, {
           ...session,
-          blocks: updateBlocks(session.blocks),
+          blocks: session.blocks.map((block) =>
+            block.id === action.blockId ? action.block : block
+          ),
+          streaming,
         });
       } else {
-        const subagent = session.subagents.get(action.conversationId);
+        // Replace in subagent
+        const subagent = session.subagents.get(conversationId);
         if (subagent) {
           const newSubagents = new Map(session.subagents);
-          newSubagents.set(action.conversationId, {
+          newSubagents.set(conversationId, {
             ...subagent,
-            blocks: updateBlocks(subagent.blocks),
+            blocks: subagent.blocks.map((block) =>
+              block.id === action.blockId ? action.block : block
+            ),
           });
 
           sessions.set(action.sessionId, {
             ...session,
             subagents: newSubagents,
+            streaming,
           });
         }
       }
@@ -433,43 +476,6 @@ export function agentServiceReducer(
           sessions.set(action.sessionId, {
             ...session,
             subagents: newSubagents,
-          });
-        }
-      }
-
-      return { ...state, sessions };
-    }
-
-    case 'BLOCK_COMPLETED': {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(action.sessionId);
-
-      if (!session) return state;
-
-      const updateBlocks = (blocks: ConversationBlock[]) =>
-        blocks.map((block) =>
-          block.id === action.blockId ? action.block : block
-        );
-
-      if (action.conversationId === 'main') {
-        sessions.set(action.sessionId, {
-          ...session,
-          blocks: updateBlocks(session.blocks),
-          isStreaming: false,
-        });
-      } else {
-        const subagent = session.subagents.get(action.conversationId);
-        if (subagent) {
-          const newSubagents = new Map(session.subagents);
-          newSubagents.set(action.conversationId, {
-            ...subagent,
-            blocks: updateBlocks(subagent.blocks),
-          });
-
-          sessions.set(action.sessionId, {
-            ...session,
-            subagents: newSubagents,
-            isStreaming: false,
           });
         }
       }
@@ -587,24 +593,6 @@ export function agentServiceReducer(
       sessions.set(action.sessionId, {
         ...session,
         files: session.files.filter((f) => f.path !== action.path),
-      });
-
-      return { ...state, sessions };
-    }
-
-    case 'SANDBOX_STATUS_UPDATED': {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(action.sessionId);
-
-      if (!session) return state;
-
-      sessions.set(action.sessionId, {
-        ...session,
-        sandboxStatus: {
-          sandboxId: action.sandboxId,
-          status: action.status,
-          restartCount: action.restartCount,
-        },
       });
 
       return { ...state, sessions };

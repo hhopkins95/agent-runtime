@@ -1,8 +1,8 @@
 import Database from "better-sqlite3";
 import type {
   PersistenceAdapter,
-  SessionListData,
-  SavedSessionData,
+  PersistedSessionListData,
+  PersistedSessionData,
   WorkspaceFile,
   AgentProfile,
   AgentProfileListData,
@@ -13,6 +13,8 @@ import * as path from "path";
 /**
  * SQLite implementation of PersistenceAdapter for persistent storage.
  * Data persists across server restarts in a local SQLite database file.
+ *
+ * Note: Session status is NOT persisted - it's derived from runtime state.
  */
 export class SqlitePersistenceAdapter implements PersistenceAdapter {
   private db: Database.Database;
@@ -39,13 +41,12 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
 
   private initSchema(): void {
     this.db.exec(`
-      -- Sessions table
+      -- Sessions table (no status column - status is derived from runtime state)
       CREATE TABLE IF NOT EXISTS sessions (
         session_id TEXT PRIMARY KEY,
         type TEXT NOT NULL,
         agent_profile_reference TEXT NOT NULL,
         name TEXT,
-        status TEXT NOT NULL,
         last_activity INTEGER,
         created_at INTEGER,
         metadata TEXT
@@ -75,6 +76,9 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
         data TEXT NOT NULL
       );
     `);
+
+    // Migration: Remove status column if it exists (for existing databases)
+    // SQLite doesn't support DROP COLUMN easily, so we'll just ignore the column
   }
 
   private seedProfiles(profiles: AgentProfile[]): void {
@@ -101,10 +105,10 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
   // Session Operations
   // ========================================
 
-  async listAllSessions(): Promise<SessionListData[]> {
+  async listAllSessions(): Promise<PersistedSessionListData[]> {
     const rows = this.db
       .prepare(
-        `SELECT session_id, type, agent_profile_reference, name, status, last_activity, created_at, metadata
+        `SELECT session_id, type, agent_profile_reference, name, last_activity, created_at, metadata
          FROM sessions`
       )
       .all() as any[];
@@ -114,18 +118,17 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
       type: row.type,
       agentProfileReference: row.agent_profile_reference,
       name: row.name ?? undefined,
-      status: row.status,
       lastActivity: row.last_activity ?? undefined,
       createdAt: row.created_at ?? undefined,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
     }));
   }
 
-  async loadSession(sessionId: string): Promise<SavedSessionData | null> {
+  async loadSession(sessionId: string): Promise<PersistedSessionData | null> {
     // Get session
     const session = this.db
       .prepare(
-        `SELECT session_id, type, agent_profile_reference, name, status, last_activity, created_at, metadata
+        `SELECT session_id, type, agent_profile_reference, name, last_activity, created_at, metadata
          FROM sessions WHERE session_id = ?`
       )
       .get(sessionId) as any;
@@ -158,7 +161,6 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
       type: session.type,
       agentProfileReference: session.agent_profile_reference,
       name: session.name ?? undefined,
-      status: session.status,
       lastActivity: session.last_activity ?? undefined,
       createdAt: session.created_at ?? undefined,
       metadata: session.metadata ? JSON.parse(session.metadata) : undefined,
@@ -174,18 +176,17 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
     };
   }
 
-  async createSessionRecord(session: SessionListData): Promise<void> {
+  async createSessionRecord(session: PersistedSessionListData): Promise<void> {
     this.db
       .prepare(
-        `INSERT INTO sessions (session_id, type, agent_profile_reference, name, status, last_activity, created_at, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sessions (session_id, type, agent_profile_reference, name, last_activity, created_at, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         session.sessionId,
         session.type,
         session.agentProfileReference,
         session.name ?? null,
-        session.status,
         session.lastActivity ?? null,
         session.createdAt ?? null,
         session.metadata ? JSON.stringify(session.metadata) : null
@@ -194,7 +195,7 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
 
   async updateSessionRecord(
     sessionId: string,
-    updates: Partial<SessionListData>
+    updates: Partial<PersistedSessionListData>
   ): Promise<void> {
     // Build dynamic UPDATE query based on provided fields
     const fields: string[] = [];
@@ -211,10 +212,6 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
     if (updates.name !== undefined) {
       fields.push("name = ?");
       values.push(updates.name);
-    }
-    if (updates.status !== undefined) {
-      fields.push("status = ?");
-      values.push(updates.status);
     }
     if (updates.lastActivity !== undefined) {
       fields.push("last_activity = ?");

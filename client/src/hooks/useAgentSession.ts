@@ -9,7 +9,7 @@ import { useContext, useCallback, useState, useEffect } from 'react';
 import { AgentServiceContext } from '../context/AgentServiceContext';
 import type {
   AGENT_ARCHITECTURE_TYPE,
-  SessionStatus,
+  SessionRuntimeState,
 } from '../types';
 import type { SessionState } from '../context/reducer';
 
@@ -20,9 +20,10 @@ export interface UseAgentSessionResult {
   session: SessionState | null;
 
   /**
-   * Session status
+   * Session runtime state (null if not loaded)
+   * Contains isLoaded and sandbox status
    */
-  status: SessionStatus | null;
+  runtime: SessionRuntimeState | null;
 
   /**
    * Whether a session operation is in progress
@@ -83,7 +84,7 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
     ? state.sessions.get(currentSessionId) ?? null
     : null;
 
-  const status = session?.info.status ?? null;
+  const runtime = session?.info.runtime ?? null;
 
   // Auto-load session on mount if sessionId provided
   useEffect(() => {
@@ -142,7 +143,7 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
           sessionId: response.sessionId,
           type: architecture,
           agentProfileReference: agentProfileRef,
-          status: response.status,
+          runtime: response.runtime,
           createdAt: response.createdAt,
         };
 
@@ -205,7 +206,7 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
 
   return {
     session,
-    status,
+    runtime,
     isLoading,
     error,
     createSession,

@@ -28,11 +28,18 @@ export type {
 
 export type {
   AGENT_ARCHITECTURE_TYPE,
-  SessionStatus,
   WorkspaceFile,
+  RuntimeSessionData,
+  // New types (preferred)
+  SandboxStatus,
+  SessionRuntimeState,
+  SessionListItem,
+  PersistedSessionListData,
+  PersistedSessionData,
+  // Legacy types (deprecated)
+  SessionStatus,
   SessionListData,
   SavedSessionData,
-  RuntimeSessionData,
 } from './session';
 
 // ============================================================================

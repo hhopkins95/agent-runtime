@@ -3,6 +3,8 @@
  *
  * Access subagent conversations for Claude SDK sessions.
  * Provides real-time updates when subagents are discovered or completed.
+ *
+ * Blocks are pre-merged with streaming content for ready-to-render display.
  */
 
 import { useContext, useCallback, useMemo } from 'react';
@@ -13,12 +15,15 @@ export interface SubagentInfo {
   id: string;
   blocks: ConversationBlock[];
   metadata: SessionMetadata;
-  status?: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed';
+  /** Set of block IDs currently streaming in this subagent */
+  streamingBlockIds: Set<string>;
 }
 
 export interface UseSubagentsResult {
   /**
-   * Array of all subagents for this session
+   * Array of all subagents for this session.
+   * Blocks are pre-merged with streaming content.
    */
   subagents: SubagentInfo[];
 
@@ -33,12 +38,12 @@ export interface UseSubagentsResult {
   hasRunningSubagents: boolean;
 
   /**
-   * Get a specific subagent by ID
+   * Get a specific subagent by ID (with merged blocks)
    */
   getSubagent: (subagentId: string) => SubagentInfo | undefined;
 
   /**
-   * Get blocks for a specific subagent
+   * Get blocks for a specific subagent (pre-merged with streaming)
    */
   getSubagentBlocks: (subagentId: string) => ConversationBlock[];
 
@@ -68,10 +73,42 @@ export function useSubagents(sessionId: string): UseSubagentsResult {
   const { state } = context;
   const session = state.sessions.get(sessionId);
 
-  const subagents = useMemo(() => {
+  // Merge streaming content into subagent blocks
+  const subagents = useMemo((): SubagentInfo[] => {
     if (!session) return [];
-    return Array.from(session.subagents.values());
-  }, [session?.subagents]);
+
+    return Array.from(session.subagents.values()).map((subagent): SubagentInfo => {
+      const streamingBlockIds = new Set<string>();
+
+      // Merge streaming content for this subagent's blocks
+      const mergedBlocks = subagent.blocks.map(block => {
+        const streamingBlock = session.streaming.get(block.id);
+        if (!streamingBlock || streamingBlock.conversationId !== subagent.id) {
+          return block;
+        }
+
+        streamingBlockIds.add(block.id);
+
+        // Only assistant_text and thinking blocks have streamable content
+        if (block.type === 'assistant_text' || block.type === 'thinking') {
+          return {
+            ...block,
+            content: streamingBlock.content,
+          };
+        }
+
+        return block;
+      });
+
+      return {
+        id: subagent.id,
+        blocks: mergedBlocks,
+        metadata: subagent.metadata,
+        status: subagent.status,
+        streamingBlockIds,
+      };
+    });
+  }, [session?.subagents, session?.streaming]);
 
   const count = subagents.length;
 
@@ -81,16 +118,16 @@ export function useSubagents(sessionId: string): UseSubagentsResult {
 
   const getSubagent = useCallback(
     (subagentId: string) => {
-      return session?.subagents.get(subagentId);
+      return subagents.find(sub => sub.id === subagentId);
     },
-    [session?.subagents]
+    [subagents]
   );
 
   const getSubagentBlocks = useCallback(
     (subagentId: string) => {
-      return session?.subagents.get(subagentId)?.blocks ?? [];
+      return subagents.find(sub => sub.id === subagentId)?.blocks ?? [];
     },
-    [session?.subagents]
+    [subagents]
   );
 
   const getSubagentsByStatus = useCallback(

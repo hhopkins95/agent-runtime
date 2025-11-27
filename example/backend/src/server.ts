@@ -65,11 +65,11 @@ async function main() {
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Access-Control-Allow-Origin', '*');
 
-        const activeSessions = runtime.sessionManager.getActiveSessions();
+        const loadedSessions = runtime.sessionManager.getLoadedSessions();
         const debugData = {
           timestamp: Date.now(),
-          activeSessionCount: activeSessions.length,
-          sessions: activeSessions.map(session => ({
+          loadedSessionCount: loadedSessions.length,
+          sessions: loadedSessions.map((session) => ({
             sessionId: session.sessionId,
             state: session.getState(),
           })),

@@ -6,7 +6,7 @@ import { BACKEND_URL } from "@/lib/constants";
 
 interface ServerDebugData {
   timestamp: number;
-  activeSessionCount: number;
+  loadedSessionCount: number;
   sessions: Array<{
     sessionId: string;
     state: any;
@@ -58,7 +58,6 @@ export function DebugPanel() {
   // Convert Map to object for display
   const clientState = {
     isInitialized: state.isInitialized,
-    activeSessionId: state.activeSessionId,
     sessionListCount: state.sessionList.length,
     sessionList: state.sessionList,
     sessionsMapCount: state.sessions.size,
@@ -69,11 +68,12 @@ export function DebugPanel() {
           info: session.info,
           blocksCount: session.blocks.length,
           blocks: session.blocks,
+          streamingCount: session.streaming.size,
+          streaming: Object.fromEntries(session.streaming),
           filesCount: session.files.length,
           files: session.files,
           subagentsCount: session.subagents.size,
           isLoading: session.isLoading,
-          isStreaming: session.isStreaming,
         },
       ])
     ),

@@ -1,10 +1,59 @@
 "use client";
 
 import { useAgentSession, useSessionList } from "@hhopkins/agent-runtime-react";
+import type { SessionListItem, SandboxStatus } from "@hhopkins/agent-runtime-react";
 
 interface SessionListProps {
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
+}
+
+/**
+ * Derive display status from runtime state
+ */
+function getDisplayStatus(session: SessionListItem): string {
+  if (!session.runtime.isLoaded) {
+    return "Not Loaded";
+  }
+  if (!session.runtime.sandbox) {
+    return "Loaded";
+  }
+  switch (session.runtime.sandbox.status) {
+    case "starting":
+      return "Starting";
+    case "ready":
+      return "Ready";
+    case "unhealthy":
+      return "Unhealthy";
+    case "terminated":
+      return "Terminated";
+    default:
+      return "Unknown";
+  }
+}
+
+/**
+ * Get color classes based on runtime state
+ */
+function getStatusColor(session: SessionListItem): string {
+  if (!session.runtime.isLoaded) {
+    return "bg-gray-100 text-gray-700";
+  }
+  if (!session.runtime.sandbox) {
+    return "bg-yellow-100 text-yellow-700";
+  }
+  switch (session.runtime.sandbox.status) {
+    case "starting":
+      return "bg-yellow-100 text-yellow-700";
+    case "ready":
+      return "bg-green-100 text-green-700";
+    case "unhealthy":
+      return "bg-red-100 text-red-700";
+    case "terminated":
+      return "bg-gray-100 text-gray-700";
+    default:
+      return "bg-gray-100 text-gray-700";
+  }
 }
 
 /**
@@ -13,7 +62,7 @@ interface SessionListProps {
  * Demonstrates:
  * - useSessionList hook for accessing all sessions
  * - useAgentSession hook for creating sessions
- * - Session status display
+ * - Session runtime state display
  */
 export function SessionList({ currentSessionId, onSessionSelect }: SessionListProps) {
   const { sessions, refresh } = useSessionList();
@@ -31,23 +80,6 @@ export function SessionList({ currentSessionId, onSessionSelect }: SessionListPr
   const formatDate = (timestamp?: number) => {
     if (!timestamp) return "Unknown";
     return new Date(timestamp).toLocaleString();
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-100 text-green-700";
-      case "inactive":
-        return "bg-gray-100 text-gray-700";
-      case "completed":
-        return "bg-blue-100 text-blue-700";
-      case "failed":
-        return "bg-red-100 text-red-700";
-      case "building-sandbox":
-        return "bg-yellow-100 text-yellow-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
   };
 
   return (
@@ -94,11 +126,9 @@ export function SessionList({ currentSessionId, onSessionSelect }: SessionListPr
                   {session.name || session.sessionId.slice(0, 8)}
                 </div>
                 <span
-                  className={`text-xs px-2 py-0.5 rounded ${getStatusColor(
-                    session.status
-                  )}`}
+                  className={`text-xs px-2 py-0.5 rounded ${getStatusColor(session)}`}
                 >
-                  {session.status}
+                  {getDisplayStatus(session)}
                 </span>
               </div>
               <div className="text-xs text-gray-500 space-y-0.5">

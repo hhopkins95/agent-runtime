@@ -6,7 +6,7 @@
  */
 
 import type {
-  SessionListData,
+  SessionListItem,
   RuntimeSessionData,
   CreateSessionRequest,
   CreateSessionResponse,
@@ -94,10 +94,10 @@ export class RestClient {
   }
 
   /**
-   * List all sessions (active + inactive)
+   * List all sessions with their runtime state
    */
-  async listSessions(): Promise<SessionListData[]> {
-    const response = await this.request<{ sessions: SessionListData[] }>(
+  async listSessions(): Promise<SessionListItem[]> {
+    const response = await this.request<{ sessions: SessionListItem[] }>(
       '/api/sessions'
     );
     return response.sessions;

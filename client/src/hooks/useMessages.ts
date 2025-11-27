@@ -3,27 +3,38 @@
  *
  * Access conversation blocks and send messages to the agent.
  * Provides real-time streaming updates for the main conversation.
+ *
+ * Blocks are pre-merged with streaming content - consumers receive
+ * ready-to-render data with streaming content included.
  */
 
-import { useContext, useCallback, useState } from 'react';
+import { useContext, useCallback, useState, useMemo } from 'react';
 import { AgentServiceContext } from '../context/AgentServiceContext';
 import type { ConversationBlock, SessionMetadata } from '../types';
 
 export interface UseMessagesResult {
   /**
-   * Conversation blocks for the main transcript
+   * Conversation blocks for the main transcript.
+   * Pre-merged with streaming content for ready-to-render display.
    */
   blocks: ConversationBlock[];
+
+  /**
+   * Set of block IDs that are currently streaming.
+   * Use to show typing indicators, cursors, etc.
+   */
+  streamingBlockIds: Set<string>;
+
+  /**
+   * Whether any block is currently streaming.
+   * Convenience for `streamingBlockIds.size > 0`
+   */
+  isStreaming: boolean;
 
   /**
    * Session metadata (tokens, cost, model)
    */
   metadata: SessionMetadata;
-
-  /**
-   * Whether the agent is currently streaming a response
-   */
-  isStreaming: boolean;
 
   /**
    * Error from last message send
@@ -36,12 +47,12 @@ export interface UseMessagesResult {
   sendMessage: (content: string) => Promise<void>;
 
   /**
-   * Get a specific block by ID
+   * Get a specific block by ID (from merged blocks)
    */
   getBlock: (blockId: string) => ConversationBlock | undefined;
 
   /**
-   * Get all blocks of a specific type
+   * Get all blocks of a specific type (from merged blocks)
    */
   getBlocksByType: <T extends ConversationBlock['type']>(
     type: T
@@ -65,9 +76,45 @@ export function useMessages(sessionId: string): UseMessagesResult {
 
   const session = state.sessions.get(sessionId);
 
-  const blocks = session?.blocks ?? [];
+  // Merge streaming content into blocks for display
+  const mergedBlocks = useMemo(() => {
+    if (!session) return [];
+
+    return session.blocks.map(block => {
+      // Only merge streaming content for main conversation blocks
+      const streamingBlock = session.streaming.get(block.id);
+      if (!streamingBlock || streamingBlock.conversationId !== 'main') {
+        return block;
+      }
+
+      // Only assistant_text and thinking blocks have streamable content
+      if (block.type === 'assistant_text' || block.type === 'thinking') {
+        return {
+          ...block,
+          content: streamingBlock.content,
+        };
+      }
+
+      return block;
+    });
+  }, [session?.blocks, session?.streaming]);
+
+  // Get IDs of blocks that are currently streaming
+  const streamingBlockIds = useMemo(() => {
+    if (!session) return new Set<string>();
+
+    const ids = new Set<string>();
+    for (const [blockId, streamingBlock] of session.streaming) {
+      // Only include main conversation blocks
+      if (streamingBlock.conversationId === 'main') {
+        ids.add(blockId);
+      }
+    }
+    return ids;
+  }, [session?.streaming]);
+
   const metadata = session?.metadata ?? {};
-  const isStreaming = session?.isStreaming ?? false;
+  const isStreaming = streamingBlockIds.size > 0;
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -87,25 +134,26 @@ export function useMessages(sessionId: string): UseMessagesResult {
 
   const getBlock = useCallback(
     (blockId: string) => {
-      return blocks.find((block) => block.id === blockId);
+      return mergedBlocks.find((block) => block.id === blockId);
     },
-    [blocks]
+    [mergedBlocks]
   );
 
   const getBlocksByType = useCallback(
     <T extends ConversationBlock['type']>(type: T) => {
-      return blocks.filter((block) => block.type === type) as Extract<
+      return mergedBlocks.filter((block) => block.type === type) as Extract<
         ConversationBlock,
         { type: T }
       >[];
     },
-    [blocks]
+    [mergedBlocks]
   );
 
   return {
-    blocks,
-    metadata,
+    blocks: mergedBlocks,
+    streamingBlockIds,
     isStreaming,
+    metadata,
     error,
     sendMessage,
     getBlock,
