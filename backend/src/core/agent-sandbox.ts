@@ -84,6 +84,10 @@ export class AgentSandbox {
   private readonly sandbox: SandboxPrimitive
   private readonly architectureAdapter: AgentArchitectureAdapter
 
+  // Watcher state - initialized eagerly during sandbox creation
+  private workspaceWatcherIterator?: AsyncGenerator<FileChangeEvent>;
+  private transcriptWatcherIterator?: AsyncGenerator<FileChangeEvent>;
+
   // ============================================================================
   // Sandbox Factory
   // ============================================================================
@@ -153,12 +157,15 @@ export class AgentSandbox {
     });
 
 
-    // Set up the agent profile files 
+    // Set up the agent profile files
     await this.setupAgentProfile();
 
     // Set up initial workspace files
     await this.setupWorkspaceFiles([...(this.agentProfile.defaultWorkspaceFiles || []), ...('savedSessionData' in props.session ? props.session.savedSessionData.workspaceFiles : [])]);
 
+    // Start file watchers and wait for them to be ready
+    // This ensures watchers are in place before any queries can be executed
+    await this.startWatchers();
   }
 
   async terminate(): Promise<void> {
@@ -204,7 +211,72 @@ export class AgentSandbox {
     }
   }
 
+  // ==========================================================================
+  // File Watchers - Initialized eagerly during sandbox creation
+  // ==========================================================================
 
+  /**
+   * Start file watchers and wait for them to be ready.
+   * This is called during initialize() to ensure watchers are in place
+   * before any queries can be executed.
+   */
+  private async startWatchers(): Promise<void> {
+    const basePaths = this.sandbox.getBasePaths();
+    const adapterPaths = this.architectureAdapter.getPaths();
+
+    logger.info({
+      sessionId: this.sessionId,
+      workspacePath: basePaths.WORKSPACE_DIR,
+      transcriptPath: adapterPaths.AGENT_STORAGE_DIR,
+    }, 'Starting file watchers...');
+
+    // Start both watcher processes
+    const workspaceWatcherProcess = await this.sandbox.exec([
+      'tsx', '/app/file-watcher.ts', '--root', basePaths.WORKSPACE_DIR
+    ]);
+
+    const transcriptWatcherProcess = await this.sandbox.exec([
+      'tsx', '/app/file-watcher.ts', '--root', adapterPaths.AGENT_STORAGE_DIR
+    ]);
+
+    // Create iterators from the streams
+    this.workspaceWatcherIterator = streamJSONL<FileChangeEvent>(
+      workspaceWatcherProcess.stdout, 'workspace-watcher'
+    );
+    this.transcriptWatcherIterator = streamJSONL<FileChangeEvent>(
+      transcriptWatcherProcess.stdout, 'transcript-watcher'
+    );
+
+    // Wait for both 'ready' events before returning
+    await Promise.all([
+      this.waitForWatcherReady(this.workspaceWatcherIterator, 'workspace'),
+      this.waitForWatcherReady(this.transcriptWatcherIterator, 'transcript'),
+    ]);
+
+    logger.info({ sessionId: this.sessionId }, 'File watchers ready');
+  }
+
+  /**
+   * Wait for a watcher to emit its 'ready' event.
+   * Pulls events from the iterator until 'ready' is received.
+   */
+  private async waitForWatcherReady(
+    iterator: AsyncGenerator<FileChangeEvent>,
+    name: string
+  ): Promise<void> {
+    for await (const event of iterator) {
+      if (event.type === 'ready') {
+        logger.info({ watched: event.watched }, `${name} watcher ready`);
+        return;
+      }
+      if (event.type === 'error') {
+        throw new Error(`${name} watcher failed to start: ${event.message}`);
+      }
+      // Shouldn't get file events before ready, but log if we do
+      logger.warn({ event, name }, 'Received file event before watcher ready');
+    }
+    throw new Error(`${name} watcher ended without emitting ready event`);
+  }
 
   // ==========================================================================
   // Operations
@@ -220,25 +292,15 @@ export class AgentSandbox {
 
 
   async *streamWorkspaceFileChanges(): AsyncGenerator<WorkspaceFile> {
-    const paths = this.sandbox.getBasePaths()
-    logger.info({
-      sessionId: this.sessionId,
-      watchPath: paths.WORKSPACE_DIR
-    }, 'Starting workspace file watcher...');
+    if (!this.workspaceWatcherIterator) {
+      throw new Error('Workspace watcher not initialized - call startWatchers() first');
+    }
 
-    // Start file watcher process with --root flag
-    const process = await this.sandbox.exec([
-      'tsx',
-      '/app/file-watcher.ts',
-      '--root',
-      paths.WORKSPACE_DIR
-    ]);
-
-    // Stream file change events
-    for await (const event of streamJSONL<FileChangeEvent>(process.stdout, 'workspace-watcher')) {
-      // Filter out ready and error events
+    // Consume events from the already-initialized iterator
+    // (ready event was already consumed in waitForWatcherReady)
+    for await (const event of this.workspaceWatcherIterator) {
+      // Filter out ready and error events (shouldn't happen, but handle gracefully)
       if (event.type === 'ready') {
-        logger.info({ watched: event.watched }, 'Workspace file watcher ready');
         continue;
       }
 
@@ -247,7 +309,6 @@ export class AgentSandbox {
         continue;
       }
 
-      // Transform FileChangeEvent to WorkspaceFile
       // Skip files with null content (binary, deleted, or too large)
       if (event.content === null) {
         logger.debug({ path: event.path, type: event.type }, 'Skipping file with null content');
@@ -260,32 +321,19 @@ export class AgentSandbox {
       };
     }
 
-    logger.warn('Workspace file watcher process ended');
+    logger.warn({ sessionId: this.sessionId }, 'Workspace file watcher process ended');
   }
 
   async *streamSessionTranscriptChanges(sessionId: string): AsyncGenerator<string> {
+    if (!this.transcriptWatcherIterator) {
+      throw new Error('Transcript watcher not initialized - call startWatchers() first');
+    }
 
-    const paths = this.architectureAdapter.getPaths();
-
-    logger.info({
-      sessionId,
-      watchPath: paths.AGENT_STORAGE_DIR,
-    }, 'Starting session transcript file watcher...');
-
-    // Start file watcher process with --root flag
-    const process = await this.sandbox.exec([
-      'tsx',
-      '/app/file-watcher.ts',
-      '--root',
-      paths.AGENT_STORAGE_DIR
-    ]);
-
-
-    // Stream file change events
-    for await (const event of streamJSONL<FileChangeEvent>(process.stdout, 'transcript-watcher')) {
-      // Filter out ready and error events
+    // Consume events from the already-initialized iterator
+    // (ready event was already consumed in waitForWatcherReady)
+    for await (const event of this.transcriptWatcherIterator) {
+      // Filter out ready and error events (shouldn't happen, but handle gracefully)
       if (event.type === 'ready') {
-        logger.info({ watched: event.watched }, 'Transcript file watcher ready');
         continue;
       }
 
