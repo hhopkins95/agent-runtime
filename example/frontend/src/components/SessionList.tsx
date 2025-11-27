@@ -101,7 +101,7 @@ export function SessionList({ currentSessionId, onSessionSelect }: SessionListPr
       </div>
 
       {/* Session List */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2">
         {sessions.length === 0 && (
           <div className="flex items-center justify-center h-full text-gray-400">
             <div className="text-center">

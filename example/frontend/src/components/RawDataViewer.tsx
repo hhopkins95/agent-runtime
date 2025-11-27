@@ -259,7 +259,7 @@ export function RawDataViewer({ sessionId }: RawDataViewerProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4">
         {viewMode === "client" ? renderClientState() : renderServerState()}
       </div>
     </div>

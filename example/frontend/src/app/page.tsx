@@ -24,9 +24,9 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<"chat" | "files" | "subagents" | "raw">("chat");
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b shadow-sm">
+      <header className="flex-shrink-0 bg-white border-b shadow-sm">
         <div className="max-w-screen-2xl mx-auto px-6 py-4">
           <h1 className="text-2xl font-bold text-gray-800">
             Agent Runtime Example
@@ -38,10 +38,10 @@ export default function HomePage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-screen-2xl mx-auto px-6 py-6">
-        <div className="grid grid-cols-12 gap-6 h-[calc(100vh-140px)]">
+      <main className="flex-1 min-h-0 max-w-screen-2xl w-full mx-auto px-6 py-6 overflow-hidden">
+        <div className="grid grid-cols-12 gap-6 h-full overflow-hidden">
           {/* Left Sidebar - Session List */}
-          <div className="col-span-3 h-full">
+          <div className="col-span-3 h-full overflow-hidden">
             <SessionList
               currentSessionId={currentSessionId}
               onSessionSelect={setCurrentSessionId}
@@ -49,7 +49,7 @@ export default function HomePage() {
           </div>
 
           {/* Main Panel */}
-          <div className="col-span-9 flex flex-col">
+          <div className="col-span-9 h-full flex flex-col overflow-hidden">
             {!currentSessionId ? (
               <div className="flex-1 flex items-center justify-center bg-white rounded-lg shadow">
                 <div className="text-center text-gray-400">
@@ -112,7 +112,7 @@ export default function HomePage() {
                 </div>
 
                 {/* Tab Content */}
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 overflow-hidden">
                   {activeTab === "chat" && (
                     <AgentChat sessionId={currentSessionId} />
                   )}
@@ -137,7 +137,7 @@ export default function HomePage() {
       <DebugEventList />
 
       {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-white border-t py-2">
+      <footer className="flex-shrink-0 bg-white border-t py-2">
         <div className="max-w-screen-2xl mx-auto px-6">
           <p className="text-xs text-gray-500 text-center">
             Built with @hhopkins/agent-runtime and @hhopkins/agent-runtime-react
