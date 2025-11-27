@@ -108,28 +108,21 @@ async function executeQuery() {
     };
 
 
-
-    console.log("Executing Prompt: " + prompt);
-    console.log("Options: " + JSON.stringify(options));
-
     // Check if session already exists by looking for transcript file
     const needsCreation = !sessionExists(sessionId);
 
-    console.log("Needs Creation: " + needsCreation);
     let generator: Query;
     if (needsCreation) {
-      console.log("Creating new session with id: " + sessionId);
       generator = query({
         prompt,
         options: {
           ...options,
           extraArgs: {
             'session-id': sessionId,
-          },
+          }
         }
       });
     } else {
-      console.log("Resuming existing session: " + sessionId);
       generator = query({
         prompt,
         options: {
