@@ -35,6 +35,7 @@ export type {
   SystemBlock,
   SubagentStatus,
   SubagentBlock,
+  ErrorBlock,
   ConversationBlock,
   // WebSocket event types
   ServerToClientEvents,
@@ -50,6 +51,7 @@ export {
   isThinkingBlock,
   isSystemBlock,
   isSubagentBlock,
+  isErrorBlock,
 } from '@hhopkins/agent-runtime/types';
 
 // ============================================================================

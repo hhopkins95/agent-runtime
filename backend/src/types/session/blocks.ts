@@ -283,6 +283,25 @@ export interface SubagentBlock extends BaseBlock {
   toolUseId?: string;
 }
 
+/**
+ * Error block
+ * Represents an error that occurred during agent processing.
+ * Used to display errors inline in the conversation.
+ */
+export interface ErrorBlock extends BaseBlock {
+  type: 'error';
+
+  /**
+   * Error message to display to the user
+   */
+  message: string;
+
+  /**
+   * Error code if available (e.g., "SANDBOX_FAILED", "SDK_TIMEOUT")
+   */
+  code?: string;
+}
+
 // ============================================================================
 // Union Type
 // ============================================================================
@@ -297,7 +316,8 @@ export type ConversationBlock =
   | ToolResultBlock
   | ThinkingBlock
   | SystemBlock
-  | SubagentBlock;
+  | SubagentBlock
+  | ErrorBlock;
 
 // ============================================================================
 // Type Guards
@@ -329,4 +349,8 @@ export function isSystemBlock(block: ConversationBlock): block is SystemBlock {
 
 export function isSubagentBlock(block: ConversationBlock): block is SubagentBlock {
   return block.type === 'subagent';
+}
+
+export function isErrorBlock(block: ConversationBlock): block is ErrorBlock {
+  return block.type === 'error';
 }

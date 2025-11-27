@@ -225,8 +225,8 @@ export class AgentSession {
 
     logger.info({ sessionId: this.sessionId }, 'Activating sandbox...');
 
-    this.sandboxStatus = 'starting';
-    this.emitRuntimeStatus();
+    // Note: 'starting' status is already emitted by sendMessage() before calling this method
+    // This ensures clients get immediate feedback before the sandbox creation process
 
     // Build session data for sandbox creation
     const savedSessionData: PersistedSessionData = {
@@ -275,6 +275,13 @@ export class AgentSession {
    * Send message to agent and stream responses
    */
   async sendMessage(message: string): Promise<void> {
+    // Emit 'starting' status immediately when sandbox doesn't exist
+    // This provides feedback to clients before sandbox creation (which can take a while)
+    if (!this.sandbox) {
+      this.sandboxStatus = 'starting';
+      this.emitRuntimeStatus();
+    }
+
     // Lazily create sandbox if it doesn't exist
     await this.activateSandbox();
 

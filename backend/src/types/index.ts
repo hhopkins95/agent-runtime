@@ -75,6 +75,7 @@ export type {
   SystemBlock,
   SubagentStatus,
   SubagentBlock,
+  ErrorBlock,
   // Union type
   ConversationBlock,
 } from './session/blocks';
@@ -88,6 +89,7 @@ export {
   isThinkingBlock,
   isSystemBlock,
   isSubagentBlock,
+  isErrorBlock,
 } from './session/blocks';
 
 // ============================================================================

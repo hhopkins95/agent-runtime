@@ -15,6 +15,7 @@ import type {
 } from '../../../types/session/blocks.js';
 import { logger } from '../../../config/logger.js';
 import { StreamEvent } from '../../../types/session/streamEvents.js';
+import { matchesGlob } from 'path/win32';
 
 
 
@@ -37,6 +38,7 @@ export function convertMessagesToBlocks(messages: SDKMessage[]): ConversationBlo
 export function parseStreamEvent(event: SDKMessage): StreamEvent[] {
   // Handle system error messages from SDK executor
   if ((event as any).type === 'system' && (event as any).subtype === 'error') {
+    logger.error({ event }, 'System error message from SDK executor');
     throw new Error((event as any).error?.message || 'Unknown SDK error');
   }
 
@@ -139,7 +141,7 @@ export function sdkMessageToBlocks(msg: SDKMessage): ConversationBlock[] {
         return [];
 
       default:
-        logger.warn({ msgType: (msg as any).type }, 'Unknown SDK message type');
+        logger.warn({ msgType: (msg as any).type, msg }, 'Unknown SDK message type');
         return [];
     }
   } catch (error) {

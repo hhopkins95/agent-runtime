@@ -10,7 +10,7 @@
 
 import { useContext, useCallback, useState, useMemo, useEffect } from 'react';
 import { AgentServiceContext } from '../context/AgentServiceContext';
-import type { ConversationBlock, SessionMetadata } from '../types';
+import type { ConversationBlock, UserMessageBlock, SessionMetadata } from '../types';
 
 export interface UseMessagesResult {
   /**
@@ -146,16 +146,39 @@ export function useMessages(sessionId: string): UseMessagesResult {
     async (content: string) => {
       setError(null);
 
+      // Create optimistic block with special prefix ID
+      const optimisticId = `optimistic-${Date.now()}`;
+      const optimisticBlock: UserMessageBlock = {
+        id: optimisticId,
+        type: 'user_message',
+        content,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Dispatch optimistic update immediately
+      dispatch({
+        type: 'OPTIMISTIC_USER_MESSAGE',
+        sessionId,
+        block: optimisticBlock,
+      });
+
       try {
         await restClient.sendMessage(sessionId, content);
         // Response will come via WebSocket events
       } catch (err) {
+        // Remove optimistic message on error
+        dispatch({
+          type: 'REMOVE_OPTIMISTIC_MESSAGE',
+          sessionId,
+          optimisticId,
+        });
+
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         throw error;
       }
     },
-    [sessionId, restClient]
+    [sessionId, restClient, dispatch]
   );
 
   const getBlock = useCallback(

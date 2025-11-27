@@ -150,13 +150,23 @@ export function AgentServiceProvider({
     wsManager.on('session:block:complete', (data) => {
       logEvent('session:block:complete', data);
       dispatch({ type: 'EVENT_LOGGED', eventName: 'session:block:complete', payload: data });
-      dispatch({
-        type: 'STREAM_COMPLETED',
-        sessionId: data.sessionId,
-        conversationId: data.conversationId,
-        blockId: data.blockId,
-        block: data.block,
-      });
+
+      // Handle user_message blocks specially - replace optimistic message
+      if (data.block.type === 'user_message') {
+        dispatch({
+          type: 'REPLACE_OPTIMISTIC_USER_MESSAGE',
+          sessionId: data.sessionId,
+          block: data.block,
+        });
+      } else {
+        dispatch({
+          type: 'STREAM_COMPLETED',
+          sessionId: data.sessionId,
+          conversationId: data.conversationId,
+          blockId: data.blockId,
+          block: data.block,
+        });
+      }
     });
 
     wsManager.on('session:metadata:update', (data) => {
@@ -250,6 +260,18 @@ export function AgentServiceProvider({
     wsManager.on('error', (error) => {
       console.error('[AgentService] WebSocket error:', error);
       dispatch({ type: 'EVENT_LOGGED', eventName: 'error', payload: error });
+
+      // Add error as inline block in conversation if sessionId is provided
+      if (error.sessionId) {
+        dispatch({
+          type: 'ERROR_BLOCK_ADDED',
+          sessionId: error.sessionId,
+          error: {
+            message: error.message,
+            code: error.code,
+          },
+        });
+      }
     });
 
     // Cleanup: Remove all listeners on unmount

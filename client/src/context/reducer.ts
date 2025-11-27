@@ -15,6 +15,8 @@ import type {
   SessionRuntimeState,
   RuntimeSessionData,
   ConversationBlock,
+  UserMessageBlock,
+  ErrorBlock,
   WorkspaceFile,
   SessionMetadata,
   StreamingContent,
@@ -153,7 +155,15 @@ export type AgentServiceAction =
 
   // Debug Events
   | { type: 'EVENT_LOGGED'; eventName: string; payload: unknown }
-  | { type: 'EVENTS_CLEARED' };
+  | { type: 'EVENTS_CLEARED' }
+
+  // Optimistic Message Updates
+  | { type: 'OPTIMISTIC_USER_MESSAGE'; sessionId: string; block: UserMessageBlock }
+  | { type: 'REPLACE_OPTIMISTIC_USER_MESSAGE'; sessionId: string; block: ConversationBlock }
+  | { type: 'REMOVE_OPTIMISTIC_MESSAGE'; sessionId: string; optimisticId: string }
+
+  // Error Display
+  | { type: 'ERROR_BLOCK_ADDED'; sessionId: string; error: { message: string; code?: string } };
 
 // ============================================================================
 // Initial State
@@ -566,6 +576,90 @@ export function agentServiceReducer(
         ...state,
         eventLog: [],
       };
+    }
+
+    case 'OPTIMISTIC_USER_MESSAGE': {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get(action.sessionId);
+
+      if (!session) return state;
+
+      sessions.set(action.sessionId, {
+        ...session,
+        blocks: [...session.blocks, action.block],
+      });
+
+      return { ...state, sessions };
+    }
+
+    case 'REPLACE_OPTIMISTIC_USER_MESSAGE': {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get(action.sessionId);
+
+      if (!session) return state;
+
+      // Find optimistic block with matching content (user_message type, optimistic- prefix)
+      const optimisticIndex = session.blocks.findIndex(
+        (block) =>
+          block.type === 'user_message' &&
+          block.id.startsWith('optimistic-') &&
+          block.content === (action.block as UserMessageBlock).content
+      );
+
+      if (optimisticIndex >= 0) {
+        // Replace optimistic with real block
+        const updatedBlocks = [...session.blocks];
+        updatedBlocks[optimisticIndex] = action.block;
+
+        sessions.set(action.sessionId, {
+          ...session,
+          blocks: updatedBlocks,
+        });
+      } else {
+        // No optimistic block found, just append (edge case)
+        sessions.set(action.sessionId, {
+          ...session,
+          blocks: [...session.blocks, action.block],
+        });
+      }
+
+      return { ...state, sessions };
+    }
+
+    case 'REMOVE_OPTIMISTIC_MESSAGE': {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get(action.sessionId);
+
+      if (!session) return state;
+
+      sessions.set(action.sessionId, {
+        ...session,
+        blocks: session.blocks.filter((block) => block.id !== action.optimisticId),
+      });
+
+      return { ...state, sessions };
+    }
+
+    case 'ERROR_BLOCK_ADDED': {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get(action.sessionId);
+
+      if (!session) return state;
+
+      const errorBlock: ErrorBlock = {
+        id: `error-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        message: action.error.message,
+        code: action.error.code,
+      };
+
+      sessions.set(action.sessionId, {
+        ...session,
+        blocks: [...session.blocks, errorBlock],
+      });
+
+      return { ...state, sessions };
     }
 
     default:
