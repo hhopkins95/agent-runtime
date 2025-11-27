@@ -145,6 +145,7 @@ export async function createModalSandbox(
     // Create sandbox with configuration
     const sandbox = await modal.sandboxes.create(app, image, {
       workdir: workdir,
+      timeoutMs : 1000 * 60 * 60 * 24, // 24 hours
       idleTimeoutMs : 1000 * 60 * 15, // 15 minutes
       env: {
         ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
