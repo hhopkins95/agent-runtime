@@ -105,10 +105,13 @@ export class AgentSandbox {
       agentArchitecture: "newSessionId" in props.session ? props.session.architecture : props.session.savedSessionData.type,
     });
 
-    return new AgentSandbox({
+    const agentSandbox = new AgentSandbox({
       ...props,
       sandbox: sandbox,
     });
+
+    await agentSandbox.initialize(props);
+    return agentSandbox;
   }
 
   private constructor(
@@ -126,8 +129,6 @@ export class AgentSandbox {
     }
 
     this.architectureAdapter = getAgentArchitectureAdapter(architecture, props.sandbox, this.sessionId);
-
-    this.initialize(props);
   }
 
   /**
@@ -394,6 +395,12 @@ export class AgentSandbox {
     subagents: { id: string; blocks: import('../types/session/blocks.js').ConversationBlock[] }[];
   }> {
     const transcripts = await this.readSessionTranscripts();
+    if (!transcripts.main) {
+      return {
+        blocks: [],
+        subagents: [],
+      };
+    }
     return this.architectureAdapter.parseTranscripts(transcripts.main, transcripts.subagents);
   }
 

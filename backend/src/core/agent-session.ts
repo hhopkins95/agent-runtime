@@ -387,7 +387,7 @@ export class AgentSession {
     const workspaceFiles = await this.sandbox.readAllWorkspaceFiles();
 
     this.workspaceFiles = workspaceFiles;
-    this.rawTranscript = transcripts.main;
+    this.rawTranscript = transcripts.main ?? undefined;
 
     // Parse blocks using sandbox adapter
     const parsed = await this.sandbox.parseSessionTranscripts();
