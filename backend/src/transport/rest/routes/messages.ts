@@ -27,14 +27,21 @@ export function createMessageRoutes(
     const body = await c.req.json();
     const { content } = body;
 
-    // Validate session exists
-    const session = sessionManager.getSession(sessionId);
+    // First check if session is already loaded in memory
+    let session = sessionManager.getSession(sessionId);
+
+    // If not loaded, try to load from persistence
     if (!session) {
-      throw new HTTPException(404, {
-        message: JSON.stringify(
-          errorResponse("Session not found", "SESSION_NOT_FOUND")
-        ),
-      });
+      try {
+        session = await sessionManager.loadSession(sessionId);
+      } catch {
+        // Session doesn't exist in persistence either
+        throw new HTTPException(404, {
+          message: JSON.stringify(
+            errorResponse("Session not found", "SESSION_NOT_FOUND")
+          ),
+        });
+      }
     }
 
     // Validate request body

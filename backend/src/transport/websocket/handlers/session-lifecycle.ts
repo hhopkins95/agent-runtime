@@ -30,16 +30,23 @@ export function setupSessionLifecycleHandlers(
   /**
    * Join session room to receive updates
    */
-  socket.on('session:join', (sessionId, callback) => {
+  socket.on('session:join', async (sessionId, callback) => {
     try {
       logger.info({ socketId: socket.id, sessionId }, 'Client joining session room');
 
-      // Validate session exists
-      const session = sessionManager.getSession(sessionId);
+      // First check if session is already loaded in memory
+      let session = sessionManager.getSession(sessionId);
+
+      // If not loaded, try to load from persistence
       if (!session) {
-        logger.warn({ socketId: socket.id, sessionId }, 'Session not active');
-        callback({ success: false, error: 'Session not active' });
-        return;
+        try {
+          session = await sessionManager.loadSession(sessionId);
+        } catch {
+          // Session doesn't exist in persistence either
+          logger.warn({ socketId: socket.id, sessionId }, 'Session not found');
+          callback({ success: false, error: 'Session not found' });
+          return;
+        }
       }
 
       // Join Socket.io room
