@@ -88,6 +88,11 @@ export class ModalSandbox implements SandboxPrimitive {
      * Write a file to the sandbox
      */
     async writeFile(path: string, content: string): Promise<void> {
+        // make sure the directory exists
+        const directory = path.split('/').slice(0, -1).join('/');
+        await this.createDirectory(directory);
+
+
         const file = await this.sandbox.open(path, 'w');
         try {
             await file.write(new TextEncoder().encode(content));
