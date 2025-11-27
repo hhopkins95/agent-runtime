@@ -316,6 +316,34 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
   }
 
   /**
+   * Get raw data from all tables for a session (for debugging).
+   * Returns data exactly as stored in SQLite without any parsing/transformation.
+   */
+  getRawSessionData(sessionId: string): {
+    session: Record<string, unknown> | null;
+    transcripts: Record<string, unknown>[];
+    workspaceFiles: Record<string, unknown>[];
+  } {
+    const session = this.db
+      .prepare(`SELECT * FROM sessions WHERE session_id = ?`)
+      .get(sessionId) as Record<string, unknown> | undefined;
+
+    const transcripts = this.db
+      .prepare(`SELECT * FROM transcripts WHERE session_id = ?`)
+      .all(sessionId) as Record<string, unknown>[];
+
+    const workspaceFiles = this.db
+      .prepare(`SELECT * FROM workspace_files WHERE session_id = ?`)
+      .all(sessionId) as Record<string, unknown>[];
+
+    return {
+      session: session ?? null,
+      transcripts,
+      workspaceFiles,
+    };
+  }
+
+  /**
    * Close the database connection.
    * Call this during graceful shutdown.
    */

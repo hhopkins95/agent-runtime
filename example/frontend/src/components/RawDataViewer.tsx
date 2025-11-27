@@ -8,7 +8,7 @@ interface RawDataViewerProps {
   sessionId: string;
 }
 
-type ViewMode = "client" | "server";
+type ViewMode = "client" | "server" | "persisted";
 
 /**
  * Convert Maps to plain objects for JSON serialization
@@ -43,6 +43,9 @@ export function RawDataViewer({ sessionId }: RawDataViewerProps) {
   const [serverData, setServerData] = useState<unknown>(null);
   const [isLoadingServer, setIsLoadingServer] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [persistedData, setPersistedData] = useState<unknown>(null);
+  const [isLoadingPersisted, setIsLoadingPersisted] = useState(false);
+  const [persistedError, setPersistedError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(["info"])
   );
@@ -68,6 +71,26 @@ export function RawDataViewer({ sessionId }: RawDataViewerProps) {
       setServerError(error instanceof Error ? error.message : "Unknown error");
     } finally {
       setIsLoadingServer(false);
+    }
+  }, [sessionId]);
+
+  const fetchPersistedData = useCallback(async () => {
+    setIsLoadingPersisted(true);
+    setPersistedError(null);
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/persistence/${sessionId}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setPersistedData(data);
+    } catch (error) {
+      setPersistedError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setIsLoadingPersisted(false);
     }
   }, [sessionId]);
 
@@ -222,6 +245,68 @@ export function RawDataViewer({ sessionId }: RawDataViewerProps) {
     );
   };
 
+  const renderPersistedState = () => {
+    if (!persistedData && !persistedError) {
+      return (
+        <div className="text-gray-500 text-center py-8">
+          <p className="mb-4">Click "Fetch from SQLite" to load raw persisted data</p>
+          <button
+            onClick={fetchPersistedData}
+            disabled={isLoadingPersisted}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
+          >
+            {isLoadingPersisted ? "Loading..." : "Fetch from SQLite"}
+          </button>
+        </div>
+      );
+    }
+
+    if (persistedError) {
+      return (
+        <div className="text-center py-8">
+          <p className="text-red-500 mb-4">Error: {persistedError}</p>
+          <button
+            onClick={fetchPersistedData}
+            disabled={isLoadingPersisted}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    const data = persistedData as { sessionId: string; tables: { session: unknown; transcripts: unknown[]; workspaceFiles: unknown[] } };
+    return (
+      <div>
+        <div className="mb-4 flex justify-end">
+          <button
+            onClick={fetchPersistedData}
+            disabled={isLoadingPersisted}
+            className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:bg-gray-100"
+          >
+            {isLoadingPersisted ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+        {renderCollapsibleSection(
+          "sessions table row",
+          data.tables.session,
+          "persisted-session"
+        )}
+        {renderCollapsibleSection(
+          `transcripts table (${data.tables.transcripts.length} rows)`,
+          data.tables.transcripts,
+          "persisted-transcripts"
+        )}
+        {renderCollapsibleSection(
+          `workspace_files table (${data.tables.workspaceFiles.length} rows)`,
+          data.tables.workspaceFiles,
+          "persisted-files"
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="h-full flex flex-col bg-white rounded-lg shadow">
       {/* Header */}
@@ -249,18 +334,32 @@ export function RawDataViewer({ sessionId }: RawDataViewerProps) {
             >
               Server State
             </button>
+            <button
+              onClick={() => setViewMode("persisted")}
+              className={`px-3 py-1 text-sm rounded ${
+                viewMode === "persisted"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Persisted Data
+            </button>
           </div>
         </div>
         <p className="text-xs text-gray-500 mt-1">
           {viewMode === "client"
             ? "Data from React context (SessionState)"
-            : "Data from REST API (RuntimeSessionData)"}
+            : viewMode === "server"
+            ? "Data from REST API (RuntimeSessionData)"
+            : "Raw data from SQLite tables (no parsing)"}
         </p>
       </div>
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
-        {viewMode === "client" ? renderClientState() : renderServerState()}
+        {viewMode === "client" && renderClientState()}
+        {viewMode === "server" && renderServerState()}
+        {viewMode === "persisted" && renderPersistedState()}
       </div>
     </div>
   );

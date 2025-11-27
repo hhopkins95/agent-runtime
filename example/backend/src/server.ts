@@ -111,6 +111,35 @@ async function main() {
         return;
       }
 
+      // Persistence debug endpoint - returns raw data from SQLite tables
+      const persistenceMatch = req.url?.match(/^\/persistence\/([^/]+)$/);
+      if (persistenceMatch && req.method === 'GET') {
+        const sessionId = persistenceMatch[1];
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        if (!(persistence instanceof SqlitePersistenceAdapter)) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'Persistence debug only available with SQLite adapter' }));
+          return;
+        }
+
+        try {
+          const rawData = persistence.getRawSessionData(sessionId);
+          res.statusCode = 200;
+          res.end(JSON.stringify({
+            sessionId,
+            tables: rawData,
+          }, null, 2));
+        } catch (error) {
+          console.error('Failed to get raw persistence data:', error);
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: 'Failed to get raw persistence data' }));
+        }
+        return;
+      }
+
       // Use Hono's fetch handler
       const response = await restApp.fetch(
         new Request(`http://${req.headers.host}${req.url}`, {
@@ -153,7 +182,8 @@ async function main() {
       console.log(`  GET    /sessions`);
       console.log(`  GET    /agent-profiles`);
       console.log(`  GET    /health`);
-      console.log(`  GET    /debug (raw server state)\n`);
+      console.log(`  GET    /debug (raw server state)`);
+      console.log(`  GET    /persistence/:id (raw SQLite data)\n`);
     });
 
     // Graceful shutdown
