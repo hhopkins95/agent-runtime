@@ -363,6 +363,15 @@ export class AgentSession {
       this.lastActivity = Date.now();
     } catch (error) {
       logger.error({ error, sessionId: this.sessionId, architecture: this.architecture }, 'Failed to send message');
+
+      // Emit error event so WebSocket clients are notified
+      this.eventBus.emit('session:error', {
+        sessionId: this.sessionId,
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
+
       throw error;
     }
   }

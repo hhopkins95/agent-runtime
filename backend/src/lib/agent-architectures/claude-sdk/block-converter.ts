@@ -35,6 +35,11 @@ export function convertMessagesToBlocks(messages: SDKMessage[]): ConversationBlo
 
 
 export function parseStreamEvent(event: SDKMessage): StreamEvent[] {
+  // Handle system error messages from SDK executor
+  if ((event as any).type === 'system' && (event as any).subtype === 'error') {
+    throw new Error((event as any).error?.message || 'Unknown SDK error');
+  }
+
   // Determine which conversation this belongs to
   const conversationId: 'main' | string =
     event.type === 'stream_event' && event.parent_tool_use_id

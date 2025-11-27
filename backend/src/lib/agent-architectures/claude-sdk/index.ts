@@ -309,6 +309,11 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
             // Wait for stderr reader to complete
             await stderrPromise;
 
+            // Check for failed execution with no output
+            if (messageCount === 0 && stderrLines.length > 0) {
+                throw new Error(`Claude SDK failed with no output. Stderr: ${stderrLines.join('\n')}`);
+            }
+
             logger.info({ sessionId: this.sessionId, messageCount }, 'Claude SDK query completed');
         } catch (error) {
             logger.error({ error, sessionId: this.sessionId }, 'Error during SDK execution');

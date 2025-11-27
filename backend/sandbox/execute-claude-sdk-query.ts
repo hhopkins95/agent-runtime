@@ -113,18 +113,18 @@ async function executeQuery() {
     // Success - exit cleanly
     process.exit(0);
   } catch (error: any) {
-    // Write error as JSONL message
+    // Write error as JSONL message to stdout so adapter can process it
     const errorMsg = {
-      type: 'error',
+      type: 'system',
+      subtype: 'error',
       error: {
         message: error.message || 'Unknown error',
-        stack: error.stack,
         name: error.name,
       },
       timestamp: Date.now(),
     };
 
-    console.error("ERROR HERE" + JSON.stringify(error));
+    console.log(JSON.stringify(errorMsg));
     process.exit(1);
   }
 }

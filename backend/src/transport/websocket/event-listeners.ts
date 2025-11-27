@@ -248,5 +248,24 @@ export function setupEventListeners(
     logger.debug({ sessionId: data.sessionId, path: data.path }, 'Broadcast file deleted');
   });
 
-  logger.info('EventBus → WebSocket bridge setup complete (11 event listeners registered)');
+  // ==========================================================================
+  // Error Events
+  // ==========================================================================
+
+  /**
+   * Session error occurred
+   */
+  eventBus.on('session:error', (data) => {
+    io.to(`session:${data.sessionId}`).emit('error', {
+      message: data.error.message,
+      code: data.error.code,
+      sessionId: data.sessionId,
+    });
+    logger.error(
+      { sessionId: data.sessionId, error: data.error.message },
+      'Broadcast session error'
+    );
+  });
+
+  logger.info('EventBus → WebSocket bridge setup complete (12 event listeners registered)');
 }

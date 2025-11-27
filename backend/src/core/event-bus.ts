@@ -166,6 +166,21 @@ export interface DomainEvents {
     path: string;
   };
 
+  // ============================================================================
+  // Error Events
+  // ============================================================================
+
+  /**
+   * Error occurred during session operation
+   * Emitted by: AgentSession.sendMessage()
+   */
+  'session:error': {
+    sessionId: string;
+    error: {
+      message: string;
+      code?: string;
+    };
+  };
 }
 
 /**
