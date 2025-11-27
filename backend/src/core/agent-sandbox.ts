@@ -152,24 +152,25 @@ export class AgentSandbox {
   private async initialize(props: AgentSandboxProps) {
     const { onStatusChange } = props;
 
-    // Emit status: setting up agent profile
-    onStatusChange?.("Setting up agent profile...");
+    // Emit status: setting up session files
+    onStatusChange?.("Setting up session files...");
 
-    // Set up the session transcript files
-    await this.setupSessionTranscripts({
-      sessionId: this.sessionId,
-      rawTranscript: 'savedSessionData' in props.session ? props.session.savedSessionData.rawTranscript : undefined,
-      subagents: 'savedSessionData' in props.session ? props.session.savedSessionData.subagents?.map(subagent => ({
-        id: subagent.id,
-        rawTranscript: subagent.rawTranscript ?? '',
-      })) : undefined,
-    });
-
-    // Set up the agent profile files
-    await this.setupAgentProfile();
-
-    // Set up initial workspace files
-    await this.setupWorkspaceFiles([...(this.agentProfile.defaultWorkspaceFiles || []), ...('savedSessionData' in props.session ? props.session.savedSessionData.workspaceFiles : [])]);
+    // Run all file setup operations in parallel for better performance
+    await Promise.all([
+      this.setupSessionTranscripts({
+        sessionId: this.sessionId,
+        rawTranscript: 'savedSessionData' in props.session ? props.session.savedSessionData.rawTranscript : undefined,
+        subagents: 'savedSessionData' in props.session ? props.session.savedSessionData.subagents?.map(subagent => ({
+          id: subagent.id,
+          rawTranscript: subagent.rawTranscript ?? '',
+        })) : undefined,
+      }),
+      this.setupAgentProfile(),
+      this.setupWorkspaceFiles([
+        ...(this.agentProfile.defaultWorkspaceFiles || []),
+        ...('savedSessionData' in props.session ? props.session.savedSessionData.workspaceFiles : [])
+      ]),
+    ]);
 
     // Emit status: initializing file watchers
     onStatusChange?.("Initializing file watchers...");
@@ -216,9 +217,17 @@ export class AgentSandbox {
   }
 
   private async setupWorkspaceFiles(files: WorkspaceFile[]): Promise<void> {
+    if (files.length === 0) return;
+
     const paths = this.architectureAdapter.getPaths();
-    for (const file of files) {
-      await this.sandbox.writeFile(`${paths.WORKSPACE_DIR}/${file.path}`, file.content);
+    const filesToWrite = files.map(file => ({
+      path: `${paths.WORKSPACE_DIR}/${file.path}`,
+      content: file.content
+    }));
+
+    const result = await this.sandbox.writeFiles(filesToWrite);
+    if (result.failed.length > 0) {
+      logger.warn({ failed: result.failed }, 'Some workspace files failed to write');
     }
   }
 

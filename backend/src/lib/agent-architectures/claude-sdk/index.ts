@@ -135,17 +135,8 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
                 }
             }
 
-            // 5. Default workspace files
-            if (profile.defaultWorkspaceFiles && profile.defaultWorkspaceFiles.length > 0) {
-                for (const file of profile.defaultWorkspaceFiles) {
-                    filesToWrite.push({
-                        path: `${paths.WORKSPACE_DIR}/${file.path}`,
-                        content: file.content
-                    });
-                }
-            }
-
             // Write all files in a single batch operation
+            // Note: defaultWorkspaceFiles are handled separately by setupWorkspaceFiles()
             if (filesToWrite.length > 0) {
                 logger.debug({ fileCount: filesToWrite.length }, 'Writing agent profile files in batch');
                 const result = await this.sandbox.writeFiles(filesToWrite);

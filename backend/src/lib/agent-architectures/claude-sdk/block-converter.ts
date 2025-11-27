@@ -140,6 +140,7 @@ export function sdkMessageToBlocks(msg: SDKMessage): ConversationBlock[] {
         // This is for parsing stored transcripts
         return [];
 
+      // @ts-ignore
       case 'queue-operation':
         // Internal SDK message for operation queuing - not user-visible
         // TODO: Remove this debug log once we understand the message structure
