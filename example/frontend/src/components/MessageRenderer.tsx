@@ -10,6 +10,7 @@ import type { ConversationBlock } from "@hhopkins/agent-runtime-react";
  * - Thinking blocks
  * - System messages
  * - Subagent blocks
+ * - Error blocks
  */
 export function MessageRenderer({ block }: { block: ConversationBlock }) {
   switch (block.type) {
@@ -134,6 +135,18 @@ export function MessageRenderer({ block }: { block: ConversationBlock }) {
             {block.durationMs && (
               <div className="text-xs text-gray-600 mt-1">Duration: {block.durationMs}ms</div>
             )}
+          </div>
+        </div>
+      );
+
+    case "error":
+      return (
+        <div className="flex justify-center mb-4">
+          <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-2 max-w-[80%]">
+            <div className="text-sm font-semibold mb-1 text-red-700">
+              Error {block.code && <span className="text-xs font-normal">({block.code})</span>}
+            </div>
+            <div className="text-sm text-red-600">{block.message}</div>
           </div>
         </div>
       );
