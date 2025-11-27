@@ -140,6 +140,12 @@ export function sdkMessageToBlocks(msg: SDKMessage): ConversationBlock[] {
         // This is for parsing stored transcripts
         return [];
 
+      case 'queue-operation':
+        // Internal SDK message for operation queuing - not user-visible
+        // TODO: Remove this debug log once we understand the message structure
+        logger.debug({ msg }, 'queue-operation message received');
+        return [];
+
       default:
         logger.warn({ msgType: (msg as any).type, msg }, 'Unknown SDK message type');
         return [];
