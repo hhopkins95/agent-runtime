@@ -76,6 +76,8 @@ export interface SessionRuntimeState {
     sandbox: {
         sandboxId: string;
         status: SandboxStatus;
+        /** Human-readable status message for UI display */
+        statusMessage?: string;
         restartCount: number;
         lastHealthCheck: number; // timestamp
     } | null;

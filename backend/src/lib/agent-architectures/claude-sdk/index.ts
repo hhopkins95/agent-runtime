@@ -62,22 +62,21 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
         try {
             logger.info({ profileId: profile.id }, 'Setting up agent profile');
 
-            // Create .claude directory structure
-            await this.sandbox.createDirectory(paths.AGENT_PROFILE_DIR);
+            // Collect all files to write in a single batch
+            const filesToWrite: { path: string; content: string }[] = [];
 
-            // 1. Write CLAUDE.md file (main agent instructions)
+            // 1. CLAUDE.md file (main agent instructions)
             if (profile.agentMDFile) {
-                await this.sandbox.writeFile(paths.AGENT_MD_FILE, profile.agentMDFile);
-                logger.debug('Wrote CLAUDE.md file');
+                filesToWrite.push({
+                    path: paths.AGENT_MD_FILE,
+                    content: profile.agentMDFile
+                });
             }
 
-            // 2. Write subagent definitions
+            // 2. Subagent definitions
             if (profile.subagents && profile.subagents.length > 0) {
                 const agentsDir = `${paths.AGENT_PROFILE_DIR}/agents`;
-                await this.sandbox.createDirectory(agentsDir);
-
                 for (const subagent of profile.subagents) {
-                    // Create subagent markdown file: .claude/agents/{name}.md
                     const subagentContent = [
                         `# ${subagent.name}`,
                         '',
@@ -86,41 +85,31 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
                         subagent.prompt,
                     ].join('\n');
 
-                    await this.sandbox.writeFile(
-                        `${agentsDir}/${subagent.name}.md`,
-                        subagentContent
-                    );
+                    filesToWrite.push({
+                        path: `${agentsDir}/${subagent.name}.md`,
+                        content: subagentContent
+                    });
                 }
-
-                logger.debug({ count: profile.subagents.length }, 'Wrote subagent definitions');
             }
 
-            // 3. Write custom commands
+            // 3. Custom commands
             if (profile.commands && profile.commands.length > 0) {
                 const commandsDir = `${paths.AGENT_PROFILE_DIR}/commands`;
-                await this.sandbox.createDirectory(commandsDir);
-
                 for (const command of profile.commands) {
-                    await this.sandbox.writeFile(
-                        `${commandsDir}/${command.name}.md`,
-                        command.prompt
-                    );
+                    filesToWrite.push({
+                        path: `${commandsDir}/${command.name}.md`,
+                        content: command.prompt
+                    });
                 }
-
-                logger.debug({ count: profile.commands.length }, 'Wrote command definitions');
             }
 
-            // 4. Write skills
+            // 4. Skills
             if (profile.skills && profile.skills.length > 0) {
                 const skillsDir = `${paths.AGENT_PROFILE_DIR}/skills`;
-                await this.sandbox.createDirectory(skillsDir);
-
                 for (const skill of profile.skills) {
-                    // Create skill directory: .claude/skills/{skillName}/
                     const skillDir = `${skillsDir}/${skill.name}`;
-                    await this.sandbox.createDirectory(skillDir);
 
-                    // Write main skill markdown file
+                    // Main skill markdown file
                     const skillContent = [
                         `# ${skill.name}`,
                         '',
@@ -129,43 +118,49 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
                         skill.skillMd,
                     ].join('\n');
 
-                    await this.sandbox.writeFile(
-                        `${skillDir}/skill.md`,
-                        skillContent
-                    );
+                    filesToWrite.push({
+                        path: `${skillDir}/skill.md`,
+                        content: skillContent
+                    });
 
-                    // Write supporting files
+                    // Supporting files
                     if (skill.supportingFiles && skill.supportingFiles.length > 0) {
                         for (const file of skill.supportingFiles) {
-                            const filePath = `${skillDir}/${file.relativePath}`;
-                            // Ensure parent directory exists
-                            const lastSlash = filePath.lastIndexOf('/');
-                            if (lastSlash > 0) {
-                                const parentDir = filePath.substring(0, lastSlash);
-                                await this.sandbox.createDirectory(parentDir);
-                            }
-                            await this.sandbox.writeFile(filePath, file.content);
+                            filesToWrite.push({
+                                path: `${skillDir}/${file.relativePath}`,
+                                content: file.content
+                            });
                         }
                     }
                 }
-
-                logger.debug({ count: profile.skills.length }, 'Wrote skill definitions');
             }
 
-            // 5. Write default workspace files
+            // 5. Default workspace files
             if (profile.defaultWorkspaceFiles && profile.defaultWorkspaceFiles.length > 0) {
                 for (const file of profile.defaultWorkspaceFiles) {
-                    const fullPath = `${paths.WORKSPACE_DIR}/${file.path}`;
-                    // Ensure parent directory exists
-                    const lastSlash = fullPath.lastIndexOf('/');
-                    if (lastSlash > 0) {
-                        const parentDir = fullPath.substring(0, lastSlash);
-                        await this.sandbox.createDirectory(parentDir);
-                    }
-                    await this.sandbox.writeFile(fullPath, file.content);
+                    filesToWrite.push({
+                        path: `${paths.WORKSPACE_DIR}/${file.path}`,
+                        content: file.content
+                    });
+                }
+            }
+
+            // Write all files in a single batch operation
+            if (filesToWrite.length > 0) {
+                logger.debug({ fileCount: filesToWrite.length }, 'Writing agent profile files in batch');
+                const result = await this.sandbox.writeFiles(filesToWrite);
+
+                if (result.failed.length > 0) {
+                    logger.warn({
+                        failed: result.failed,
+                        succeeded: result.success.length
+                    }, 'Some agent profile files failed to write');
                 }
 
-                logger.debug({ count: profile.defaultWorkspaceFiles.length }, 'Wrote default workspace files');
+                logger.debug({
+                    succeeded: result.success.length,
+                    failed: result.failed.length
+                }, 'Batch file write complete');
             }
 
             logger.info({ profileId: profile.id }, 'Agent profile setup complete');
@@ -178,20 +173,35 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
     public async setupSessionTranscripts(args: {sessionId: string, mainTranscript: string, subagents: {id: string, transcript: string}[]}): Promise<void> {
         const paths = this.getPaths();
 
-        // Ensure the storage directory exists
-        await this.sandbox.createDirectory(paths.AGENT_STORAGE_DIR);
+        // Collect all transcript files to write in a single batch
+        const filesToWrite: { path: string; content: string }[] = [];
 
-
+        // Main transcript
         if (args.mainTranscript) {
-        // Write main transcript
-        const mainTranscriptPath = `${paths.AGENT_STORAGE_DIR}/${args.sessionId}.jsonl`;
-        await this.sandbox.writeFile(mainTranscriptPath, args.mainTranscript);
+            filesToWrite.push({
+                path: `${paths.AGENT_STORAGE_DIR}/${args.sessionId}.jsonl`,
+                content: args.mainTranscript
+            });
         }
 
-        // Write subagent transcripts
+        // Subagent transcripts
         for (const subagent of args.subagents) {
-            const subagentPath = `${paths.AGENT_STORAGE_DIR}/${subagent.id}.jsonl`;
-            await this.sandbox.writeFile(subagentPath, subagent.transcript);
+            filesToWrite.push({
+                path: `${paths.AGENT_STORAGE_DIR}/${subagent.id}.jsonl`,
+                content: subagent.transcript
+            });
+        }
+
+        // Write all transcripts in a single batch operation
+        if (filesToWrite.length > 0) {
+            const result = await this.sandbox.writeFiles(filesToWrite);
+
+            if (result.failed.length > 0) {
+                logger.warn({
+                    failed: result.failed,
+                    succeeded: result.success.length
+                }, 'Some transcript files failed to write');
+            }
         }
     }
 

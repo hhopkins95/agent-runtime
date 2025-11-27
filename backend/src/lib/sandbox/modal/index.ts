@@ -1,5 +1,5 @@
 import { Sandbox } from "modal";
-import { SandboxPrimitive } from "../base";
+import { SandboxPrimitive, WriteFilesResult } from "../base";
 import { AgentProfile } from "../../../types/agent-profiles";
 import { ModalContext } from "./client";
 import { createModalSandbox } from "./create-sandbox";
@@ -98,6 +98,45 @@ export class ModalSandbox implements SandboxPrimitive {
             await file.write(new TextEncoder().encode(content));
         } finally {
             await file.close();
+        }
+    }
+
+    /**
+     * Write multiple files in a single operation (bulk write for efficiency).
+     * Uses a sandbox script to write all files locally, avoiding multiple round-trips.
+     */
+    async writeFiles(files: { path: string; content: string }[]): Promise<WriteFilesResult> {
+        if (files.length === 0) {
+            return { success: [], failed: [] };
+        }
+
+        // Encode the files as base64 JSON to pass as argument
+        const payload = JSON.stringify({ files });
+        const base64Payload = Buffer.from(payload).toString('base64');
+
+        const result = await this.sandbox.exec(['tsx', '/app/bulk-write-files.ts', base64Payload]);
+        const exitCode = await result.wait();
+
+        const stdout = await result.stdout.readText();
+        const stderr = await result.stderr.readText();
+
+        if (exitCode !== 0 && !stdout) {
+            // Complete failure - script couldn't run
+            return {
+                success: [],
+                failed: files.map(f => ({ path: f.path, error: stderr || 'Unknown error' }))
+            };
+        }
+
+        try {
+            const output: WriteFilesResult = JSON.parse(stdout);
+            return output;
+        } catch {
+            // Couldn't parse output
+            return {
+                success: [],
+                failed: files.map(f => ({ path: f.path, error: `Failed to parse script output: ${stdout}` }))
+            };
         }
     }
 

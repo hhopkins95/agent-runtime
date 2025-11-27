@@ -48,6 +48,7 @@ export class AgentSession {
   private sandbox?: AgentSandbox;
   private sandboxId?: string;
   private sandboxStatus: SandboxStatus | null = null;
+  private statusMessage?: string;
   private lastHealthCheck?: number;
   private sandboxRestartCount: number = 0;
 
@@ -244,6 +245,7 @@ export class AgentSession {
       agentProfile: this.agentProfile,
       modalContext: this.modalContext,
       session: { savedSessionData },
+      onStatusChange: (message) => this.emitRuntimeStatus(message),
     });
 
     this.sandboxId = this.sandbox.getId();
@@ -256,15 +258,17 @@ export class AgentSession {
     this.startPeriodicSync();
     this.startHealthMonitoring();
 
-    this.emitRuntimeStatus();
+    this.emitRuntimeStatus("Ready");
 
     logger.info({ sessionId: this.sessionId, sandboxId: this.sandboxId }, 'Sandbox activated');
   }
 
   /**
    * Emit the current runtime status
+   * @param message Optional human-readable status message for UI display
    */
-  private emitRuntimeStatus(): void {
+  private emitRuntimeStatus(message?: string): void {
+    this.statusMessage = message;
     this.eventBus.emit('session:status', {
       sessionId: this.sessionId,
       runtime: this.getRuntimeState(),
@@ -279,7 +283,7 @@ export class AgentSession {
     // This provides feedback to clients before sandbox creation (which can take a while)
     if (!this.sandbox) {
       this.sandboxStatus = 'starting';
-      this.emitRuntimeStatus();
+      this.emitRuntimeStatus("Preparing...");
     }
 
     // Lazily create sandbox if it doesn't exist
@@ -508,6 +512,7 @@ export class AgentSession {
       sandbox: this.sandboxId && this.sandboxStatus ? {
         sandboxId: this.sandboxId,
         status: this.sandboxStatus,
+        statusMessage: this.statusMessage,
         restartCount: this.sandboxRestartCount,
         lastHealthCheck: this.lastHealthCheck ?? Date.now(),
       } : null,

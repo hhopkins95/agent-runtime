@@ -69,7 +69,9 @@ interface AgentSandboxProps {
     architecture: AGENT_ARCHITECTURE_TYPE
   } | {
     savedSessionData: PersistedSessionData
-  }
+  },
+  /** Optional callback for status updates during sandbox creation */
+  onStatusChange?: (message: string) => void,
 }
 
 
@@ -101,6 +103,10 @@ export class AgentSandbox {
   static async create(
     props: AgentSandboxProps
   ): Promise<AgentSandbox> {
+    const { onStatusChange } = props;
+
+    // Emit status: creating container
+    onStatusChange?.("Creating sandbox container...");
 
     const sandbox = await createSandbox({
       provider: "modal",
@@ -144,9 +150,12 @@ export class AgentSandbox {
 
 
   private async initialize(props: AgentSandboxProps) {
+    const { onStatusChange } = props;
+
+    // Emit status: setting up agent profile
+    onStatusChange?.("Setting up agent profile...");
 
     // Set up the session transcript files
-
     await this.setupSessionTranscripts({
       sessionId: this.sessionId,
       rawTranscript: 'savedSessionData' in props.session ? props.session.savedSessionData.rawTranscript : undefined,
@@ -156,12 +165,14 @@ export class AgentSandbox {
       })) : undefined,
     });
 
-
     // Set up the agent profile files
     await this.setupAgentProfile();
 
     // Set up initial workspace files
     await this.setupWorkspaceFiles([...(this.agentProfile.defaultWorkspaceFiles || []), ...('savedSessionData' in props.session ? props.session.savedSessionData.workspaceFiles : [])]);
+
+    // Emit status: initializing file watchers
+    onStatusChange?.("Initializing file watchers...");
 
     // Start file watchers and wait for them to be ready
     // This ensures watchers are in place before any queries can be executed
