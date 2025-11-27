@@ -197,6 +197,10 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
         const paths = this.getPaths();
         const mainTranscriptPath = `${paths.AGENT_STORAGE_DIR}/${this.sessionId}.jsonl`;
 
+        const allFilesInStorageDirectory = await this.sandbox.listFiles(paths.AGENT_STORAGE_DIR);
+
+        logger.info({ sessionId: this.sessionId, allFilesInStorageDirectory }, 'All files in storage directory');
+
         try {
             // Read main transcript
             const mainContent = await this.sandbox.readFile(mainTranscriptPath);
@@ -233,6 +237,9 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
             // Determine if we need to create a new session or resume
             const { main: existingTranscript } = await this.readSessionTranscripts({});
             const needsSessionCreation = !existingTranscript;
+
+
+            logger.info({ sessionId: this.sessionId, needsSessionCreation }, 'Needs session creation');
 
             // Build command arguments
             const command = ['tsx', '/app/execute-claude-sdk-query.ts', args.query];
