@@ -22,7 +22,7 @@ export interface SandboxPrimitive {
 
     exec : (command : string[]) => Promise<{stdout : ReadableStream, stderr : ReadableStream }>,
 
-    readFile : (path : string) => Promise<string>,
+    readFile : (path : string) => Promise<string | null>,
 
     writeFile : (path : string, content : string) => Promise<void>,
 

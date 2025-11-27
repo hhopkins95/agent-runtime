@@ -25,7 +25,7 @@ export interface AgentArchitectureAdapter<NativeStreamEventType = any> {
 
     setupSessionTranscripts : (args : {sessionId : string, mainTranscript : string, subagents : {id : string, transcript : string}[]}) => Promise<void>,
 
-    readSessionTranscripts : (args : {}) => Promise<{main : string, subagents : {id : string, transcript : string}[]}>,
+    readSessionTranscripts : (args : {}) => Promise<{main : string | null, subagents : {id : string, transcript : string}[]}>,
 
     executeQuery : (args : {query : string}) => AsyncGenerator<StreamEvent>,
 

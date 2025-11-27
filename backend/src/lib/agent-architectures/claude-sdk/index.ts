@@ -193,17 +193,20 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
         }
     }
 
-    public async readSessionTranscripts(_args: {}): Promise<{main: string, subagents: {id: string, transcript: string}[]}> {
+    public async readSessionTranscripts(_args: {}): Promise<{main: string | null, subagents: {id: string, transcript: string}[]}> {
         const paths = this.getPaths();
         const mainTranscriptPath = `${paths.AGENT_STORAGE_DIR}/${this.sessionId}.jsonl`;
-
-        const allFilesInStorageDirectory = await this.sandbox.listFiles(paths.AGENT_STORAGE_DIR);
-
-        logger.info({ sessionId: this.sessionId, allFilesInStorageDirectory }, 'All files in storage directory');
 
         try {
             // Read main transcript
             const mainContent = await this.sandbox.readFile(mainTranscriptPath);
+
+            if (!mainContent) {
+                return {
+                    main: null,
+                    subagents: [],
+                };
+            }
 
             // List all files in storage directory (pattern to find agent-*.jsonl)
             const files = await this.sandbox.listFiles(paths.AGENT_STORAGE_DIR, 'agent-*.jsonl');
@@ -212,9 +215,8 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
             const subagents: {id: string, transcript: string}[] = [];
             for (const file of files) {
                 const subagentId = file.replace('.jsonl', '');
-                const filePath = `${paths.AGENT_STORAGE_DIR}/${file}`;
-                const content = await this.sandbox.readFile(filePath);
-                subagents.push({ id: subagentId, transcript: content });
+                const content = await this.sandbox.readFile(file);
+                subagents.push({ id: subagentId, transcript: content ?? "" });
             }
 
             return {
@@ -222,6 +224,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
                 subagents,
             };
         } catch (error) {
+            logger.error({ error, sessionId: this.sessionId }, 'Error reading session transcripts');
             // If main transcript doesn't exist yet, return empty
             return {
                 main: '',
@@ -237,9 +240,6 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
             // Determine if we need to create a new session or resume
             const { main: existingTranscript } = await this.readSessionTranscripts({});
             const needsSessionCreation = !existingTranscript;
-
-
-            logger.info({ sessionId: this.sessionId, needsSessionCreation }, 'Needs session creation');
 
             // Build command arguments
             const command = ['tsx', '/app/execute-claude-sdk-query.ts', args.query];

@@ -71,14 +71,17 @@ export class ModalSandbox implements SandboxPrimitive {
     /**
      * Read a file from the sandbox
      */
-    async readFile(path: string): Promise<string> {
+    async readFile(path: string): Promise<string | null> {
         const file = await this.sandbox.open(path, 'r');
         try {
             const content = await file.read();
-            return new TextDecoder().decode(content);
+            if (content.length === 0) {
+                return null;
+            }
+            return new TextDecoder().decode(content) ?? null;
         } finally {
             await file.close();
-        }
+        }   
     }
 
     /**
