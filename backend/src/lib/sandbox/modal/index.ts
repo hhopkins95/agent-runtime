@@ -106,7 +106,7 @@ export class ModalSandbox implements SandboxPrimitive {
      * Write multiple files in a single operation (bulk write for efficiency).
      * Uses a sandbox script to write all files locally, avoiding multiple round-trips.
      */
-    async writeFiles(files: { path: string; content: string }[]): Promise<WriteFilesResult> {
+    async writeFiles(files: { path: string; content: string | undefined }[]): Promise<WriteFilesResult> {
         if (files.length === 0) {
             return { success: [], failed: [] };
         }

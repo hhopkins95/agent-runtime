@@ -7,7 +7,7 @@ export type AGENT_ARCHITECTURE_TYPE = "claude-agent-sdk" | "gemini-cli"
  */
 export type WorkspaceFile = {
     path: string,
-    content: string
+    content: string | undefined
 }
 
 // =============================================================================

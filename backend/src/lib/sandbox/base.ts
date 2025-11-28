@@ -43,7 +43,7 @@ export interface SandboxPrimitive {
      * Write multiple files in a single operation (bulk write for efficiency).
      * Creates directories as needed. Returns partial success - writes what it can.
      */
-    writeFiles : (files : { path: string; content: string }[]) => Promise<WriteFilesResult>,
+    writeFiles : (files : { path: string; content: string | undefined }[]) => Promise<WriteFilesResult>,
 
     createDirectory : (path : string) => Promise<void>,
 
