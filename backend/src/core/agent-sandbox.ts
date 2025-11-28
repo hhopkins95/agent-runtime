@@ -219,9 +219,9 @@ export class AgentSandbox {
   private async setupWorkspaceFiles(files: WorkspaceFile[]): Promise<void> {
     if (files.length === 0) return;
 
-    const paths = this.architectureAdapter.getPaths();
+    const basePaths = this.sandbox.getBasePaths();
     const filesToWrite = files.map(file => ({
-      path: `${paths.WORKSPACE_DIR}/${file.path}`,
+      path: `${basePaths.WORKSPACE_DIR}/${file.path}`,
       content: file.content
     }));
 
@@ -473,12 +473,23 @@ export class AgentSandbox {
   }
 
   async readAllWorkspaceFiles() {
-    const paths = this.sandbox.getBasePaths();
-    const workspaceFiles = await this.sandbox.listFiles(paths.WORKSPACE_DIR);
-    return await Promise.all(workspaceFiles.map(async path => ({
-      path,
-      content: await this.sandbox.readFile(path)
-    } as WorkspaceFile)));
+    const basePaths = this.sandbox.getBasePaths();
+    const workspaceFiles = await this.sandbox.listFiles(basePaths.WORKSPACE_DIR);
+    return await Promise.all(workspaceFiles.map(async fullPath => {
+      // Store relative path (strip workspace dir prefix) for portability
+      let relativePath = fullPath;
+      if (fullPath.startsWith(basePaths.WORKSPACE_DIR)) {
+        relativePath = fullPath.slice(basePaths.WORKSPACE_DIR.length);
+        // Remove leading slash if present
+        if (relativePath.startsWith('/')) {
+          relativePath = relativePath.slice(1);
+        }
+      }
+      return {
+        path: relativePath,
+        content: await this.sandbox.readFile(fullPath)
+      } as WorkspaceFile;
+    }));
   }
 
 
