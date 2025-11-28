@@ -99,7 +99,7 @@ async function executeQuery() {
 
 
       // Permission mode - accept edits but allow tool use
-      permissionMode: 'acceptEdits' as PermissionMode,
+      permissionMode: 'bypassPermissions',
 
       // MCP Servers - Register Convex backend tools
       mcpServers: {
