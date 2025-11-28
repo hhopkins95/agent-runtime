@@ -71,7 +71,7 @@ export function useMessages(sessionId: string): UseMessagesResult {
     throw new Error('useMessages must be used within AgentServiceProvider');
   }
 
-  const { state, dispatch, restClient, wsManager } = context;
+  const { state, dispatch, restClient } = context;
   const [error, setError] = useState<Error | null>(null);
 
   // Load session data from REST API if not already in state
@@ -87,20 +87,8 @@ export function useMessages(sessionId: string): UseMessagesResult {
     }
   }, [sessionId, state.sessions, restClient, dispatch]);
 
-  // Join/leave WebSocket room to receive real-time events
-  useEffect(() => {
-    if (sessionId) {
-      wsManager.joinSession(sessionId).catch((err) => {
-        console.error('[useMessages] Failed to join session room:', err);
-      });
-
-      return () => {
-        wsManager.leaveSession(sessionId).catch((err) => {
-          console.error('[useMessages] Failed to leave session room:', err);
-        });
-      };
-    }
-  }, [sessionId, wsManager]);
+  // Note: Room join/leave is handled by useAgentSession to ensure
+  // room membership persists across component lifecycle changes
 
   const session = state.sessions.get(sessionId);
 
