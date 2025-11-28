@@ -264,7 +264,7 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
          VALUES (?, ?, ?)
          ON CONFLICT(session_id, path) DO UPDATE SET content = excluded.content`
       )
-      .run(sessionId, file.path, file.content);
+      .run(sessionId, file.path, file.content ?? "");
   }
 
   async deleteSessionFile(sessionId: string, path: string): Promise<void> {
