@@ -74,7 +74,8 @@ export interface SessionRuntimeState {
     isLoaded: boolean;
     /** Sandbox state, null if no sandbox exists */
     sandbox: {
-        sandboxId: string;
+        /** Sandbox ID - not available during 'starting' phase */
+        sandboxId?: string;
         status: SandboxStatus;
         /** Human-readable status message for UI display */
         statusMessage?: string;

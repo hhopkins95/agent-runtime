@@ -509,7 +509,7 @@ export class AgentSession {
   getRuntimeState(): SessionRuntimeState {
     return {
       isLoaded: true, // If this method is called, session is loaded
-      sandbox: this.sandboxId && this.sandboxStatus ? {
+      sandbox: this.sandboxStatus ? {
         sandboxId: this.sandboxId,
         status: this.sandboxStatus,
         statusMessage: this.statusMessage,

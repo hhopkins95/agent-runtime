@@ -165,6 +165,9 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
     public async setupSessionTranscripts(args: {sessionId: string, mainTranscript: string, subagents: {id: string, transcript: string}[]}): Promise<void> {
         const paths = this.getPaths();
 
+        // Ensure the transcript directory exists (Claude creates it lazily, but we need it for the watcher)
+        await this.sandbox.exec(['mkdir', '-p', paths.AGENT_STORAGE_DIR]);
+
         // Collect all transcript files to write in a single batch
         const filesToWrite: { path: string; content: string }[] = [];
 

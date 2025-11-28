@@ -165,7 +165,7 @@ export function SessionHeader({ sessionId, onDelete }: SessionHeaderProps) {
           </div>
 
           {/* Sandbox ID (if exists) */}
-          {session.runtime.sandbox && (
+          {session.runtime.sandbox?.sandboxId && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">Sandbox:</span>
               <code className="text-xs bg-gray-100 px-2 py-0.5 rounded font-mono">
