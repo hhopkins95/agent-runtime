@@ -24,6 +24,7 @@ import { SandboxPrimitive } from '../lib/sandbox/base.js';
 import { createSandbox } from '../lib/sandbox/factory.js';
 import { ConversationBlock } from '../types/session/blocks.js';
 import { StreamEvent } from '../types/session/streamEvents.js';
+import type { EventBus } from './event-bus.js';
 
 
 const GEMINI_PROJECT_HASH = "TODO_GET_PROJECT_HASH"
@@ -64,6 +65,7 @@ const __dirname = dirname(__filename);
 interface AgentSandboxProps {
   modalContext: ModalContext,
   agentProfile: AgentProfile,
+  eventBus: EventBus,
   session: {
     newSessionId: string,
     architecture: AGENT_ARCHITECTURE_TYPE
@@ -85,10 +87,7 @@ export class AgentSandbox {
   private readonly sandboxId: string
   private readonly sandbox: SandboxPrimitive
   private readonly architectureAdapter: AgentArchitectureAdapter
-
-  // Watcher state - initialized eagerly during sandbox creation
-  private workspaceWatcherIterator?: AsyncGenerator<FileChangeEvent>;
-  private transcriptWatcherIterator?: AsyncGenerator<FileChangeEvent>;
+  private readonly eventBus: EventBus
 
   // ============================================================================
   // Sandbox Factory
@@ -130,6 +129,7 @@ export class AgentSandbox {
     this.sandbox = props.sandbox;
     this.sandboxId = props.sandbox.getId();
     this.agentProfile = props.agentProfile;
+    this.eventBus = props.eventBus;
     const architecture = "newSessionId" in props.session ? props.session.architecture : props.session.savedSessionData.type;
 
     if ('newSessionId' in props.session) {
@@ -232,7 +232,7 @@ export class AgentSandbox {
   }
 
   // ==========================================================================
-  // File Watchers - Initialized eagerly during sandbox creation
+  // File Watchers - Event-driven with Promise-based ready coordination
   // ==========================================================================
 
   /**
@@ -260,42 +260,136 @@ export class AgentSandbox {
     ]);
 
     // Create iterators from the streams
-    this.workspaceWatcherIterator = streamJSONL<FileChangeEvent>(
+    const workspaceIterator = streamJSONL<FileChangeEvent>(
       workspaceWatcherProcess.stdout, 'workspace-watcher'
     );
-    this.transcriptWatcherIterator = streamJSONL<FileChangeEvent>(
+    const transcriptIterator = streamJSONL<FileChangeEvent>(
       transcriptWatcherProcess.stdout, 'transcript-watcher'
     );
 
-    // Wait for both 'ready' events before returning
+    // Start consumers and wait for ready - consumers continue running in background
     await Promise.all([
-      this.waitForWatcherReady(this.workspaceWatcherIterator, 'workspace'),
-      this.waitForWatcherReady(this.transcriptWatcherIterator, 'transcript'),
+      this.startWorkspaceWatcherConsumer(workspaceIterator),
+      this.startTranscriptWatcherConsumer(transcriptIterator),
     ]);
 
     logger.info({ sessionId: this.sessionId }, 'File watchers ready');
   }
 
   /**
-   * Wait for a watcher to emit its 'ready' event.
-   * Pulls events from the iterator until 'ready' is received.
+   * Start the workspace watcher consumer loop.
+   * Resolves when 'ready' event is received, but continues consuming in background.
+   * Emits file events directly to EventBus.
    */
-  private async waitForWatcherReady(
-    iterator: AsyncGenerator<FileChangeEvent>,
-    name: string
+  private startWorkspaceWatcherConsumer(
+    iterator: AsyncGenerator<FileChangeEvent>
   ): Promise<void> {
-    for await (const event of iterator) {
-      if (event.type === 'ready') {
-        logger.info({ watched: event.watched }, `${name} watcher ready`);
-        return;
-      }
-      if (event.type === 'error') {
-        throw new Error(`${name} watcher failed to start: ${event.message}`);
-      }
-      // Shouldn't get file events before ready, but log if we do
-      logger.warn({ event, name }, 'Received file event before watcher ready');
-    }
-    throw new Error(`${name} watcher ended without emitting ready event`);
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Workspace watcher timeout - no ready event received'));
+      }, 30000);
+
+      (async () => {
+        try {
+          for await (const event of iterator) {
+            if (event.type === 'ready') {
+              clearTimeout(timeout);
+              logger.info({ sessionId: this.sessionId, watched: event.watched }, 'Workspace watcher ready');
+              resolve();
+              continue; // Keep consuming after ready
+            }
+
+            if (event.type === 'error') {
+              logger.error({ sessionId: this.sessionId, message: event.message, stack: event.stack }, 'Workspace watcher error');
+              continue;
+            }
+
+            // Skip files with null content (binary, deleted, or too large)
+            if (event.content === null) {
+              logger.debug({ sessionId: this.sessionId, path: event.path, type: event.type }, 'Skipping file with null content');
+              continue;
+            }
+
+            logger.info({
+              sessionId: this.sessionId,
+              path: event.path,
+              type: event.type,
+              contentLength: event.content.length
+            }, 'Emitting workspace file event');
+
+            // Emit directly to EventBus
+            this.eventBus.emit('session:file:modified', {
+              sessionId: this.sessionId,
+              file: { path: event.path, content: event.content }
+            });
+          }
+
+          logger.warn({ sessionId: this.sessionId }, 'Workspace watcher ended');
+        } catch (error) {
+          logger.error({ error, sessionId: this.sessionId }, 'Workspace watcher consumer failed');
+          // Only reject if we haven't resolved yet (before ready)
+          clearTimeout(timeout);
+        }
+      })();
+    });
+  }
+
+  /**
+   * Start the transcript watcher consumer loop.
+   * Resolves when 'ready' event is received, but continues consuming in background.
+   * Emits transcript change events directly to EventBus.
+   */
+  private startTranscriptWatcherConsumer(
+    iterator: AsyncGenerator<FileChangeEvent>
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Transcript watcher timeout - no ready event received'));
+      }, 30000);
+
+      (async () => {
+        try {
+          for await (const event of iterator) {
+            if (event.type === 'ready') {
+              clearTimeout(timeout);
+              logger.info({ sessionId: this.sessionId, watched: event.watched }, 'Transcript watcher ready');
+              resolve();
+              continue; // Keep consuming after ready
+            }
+
+            if (event.type === 'error') {
+              logger.error({ sessionId: this.sessionId, message: event.message, stack: event.stack }, 'Transcript watcher error');
+              continue;
+            }
+
+            // Skip files with null content
+            if (event.content === null) {
+              logger.debug({ sessionId: this.sessionId, path: event.path, type: event.type }, 'Skipping transcript with null content');
+              continue;
+            }
+
+            logger.debug({
+              sessionId: this.sessionId,
+              path: event.path,
+              type: event.type,
+              contentLength: event.content.length
+            }, 'Transcript file changed');
+
+            // Emit transcript change event for AgentSession to handle
+            this.eventBus.emit('session:transcript:changed', {
+              sessionId: this.sessionId,
+              content: event.content,
+              path: event.path,
+            });
+          }
+
+          logger.warn({ sessionId: this.sessionId }, 'Transcript watcher ended');
+        } catch (error) {
+          logger.error({ error, sessionId: this.sessionId }, 'Transcript watcher consumer failed');
+          clearTimeout(timeout);
+        }
+      })();
+    });
   }
 
   // ==========================================================================
@@ -310,79 +404,6 @@ export class AgentSandbox {
     });
   }
 
-
-  async *streamWorkspaceFileChanges(): AsyncGenerator<WorkspaceFile> {
-    if (!this.workspaceWatcherIterator) {
-      throw new Error('Workspace watcher not initialized - call startWatchers() first');
-    }
-
-    // Consume events from the already-initialized iterator
-    // (ready event was already consumed in waitForWatcherReady)
-    for await (const event of this.workspaceWatcherIterator) {
-      // Filter out ready and error events (shouldn't happen, but handle gracefully)
-      if (event.type === 'ready') {
-        continue;
-      }
-
-      if (event.type === 'error') {
-        logger.error({ message: event.message, stack: event.stack }, 'Workspace file watcher error');
-        continue;
-      }
-
-      // Skip files with null content (binary, deleted, or too large)
-      if (event.content === null) {
-        logger.debug({ path: event.path, type: event.type }, 'Skipping file with null content');
-        continue;
-      }
-
-      logger.info({
-        sessionId: this.sessionId,
-        path: event.path,
-        type: event.type,
-        contentLength: event.content.length
-      }, 'Yielding workspace file change');
-
-      yield {
-        path: event.path,
-        content: event.content
-      };
-    }
-
-    logger.warn({ sessionId: this.sessionId }, 'Workspace file watcher process ended');
-  }
-
-  async *streamSessionTranscriptChanges(sessionId: string): AsyncGenerator<string> {
-    if (!this.transcriptWatcherIterator) {
-      throw new Error('Transcript watcher not initialized - call startWatchers() first');
-    }
-
-    // Consume events from the already-initialized iterator
-    // (ready event was already consumed in waitForWatcherReady)
-    for await (const event of this.transcriptWatcherIterator) {
-      // Filter out ready and error events (shouldn't happen, but handle gracefully)
-      if (event.type === 'ready') {
-        continue;
-      }
-
-      if (event.type === 'error') {
-        logger.error({ message: event.message, stack: event.stack }, 'Transcript file watcher error');
-        continue;
-      }
-
-      // Skip files with null content (deleted or error reading)
-      if (event.content === null) {
-        logger.debug({ path: event.path, type: event.type }, 'Transcript file has null content');
-        continue;
-      }
-
-      logger.debug({ path: event.path, type: event.type, contentLength: event.content.length }, 'Transcript file changed');
-
-      // Yield the raw transcript content
-      yield event.content;
-    }
-
-    logger.warn({ sessionId }, 'Transcript file watcher process ended');
-  }
 
   /**
    * Check sandbox health

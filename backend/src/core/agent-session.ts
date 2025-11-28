@@ -244,6 +244,7 @@ export class AgentSession {
     this.sandbox = await AgentSandbox.create({
       agentProfile: this.agentProfile,
       modalContext: this.modalContext,
+      eventBus: this.eventBus,
       session: { savedSessionData },
       onStatusChange: (message) => this.emitRuntimeStatus(message),
     });
@@ -252,9 +253,12 @@ export class AgentSession {
     this.sandboxStatus = 'ready';
     this.lastHealthCheck = Date.now();
 
-    // Start watchers and monitoring (only when sandbox exists)
-    this.startWorkspaceFileWatcher();
-    this.startSessionTranscriptWatcher();
+    // Set up EventBus listeners for file and transcript events
+    // (AgentSandbox emits events directly to EventBus now)
+    this.setupWorkspaceFileListener();
+    this.setupTranscriptListener();
+
+    // Start monitoring and sync
     this.startPeriodicSync();
     this.startHealthMonitoring();
 
@@ -519,61 +523,62 @@ export class AgentSession {
     };
   }
 
-  private startWorkspaceFileWatcher(): void {
-    if (!this.sandbox) return;
+  /**
+   * Set up listener for workspace file events from EventBus.
+   * AgentSandbox emits file events directly to EventBus, we just need to update internal state.
+   */
+  private setupWorkspaceFileListener(): void {
+    logger.info({ sessionId: this.sessionId }, 'Setting up workspace file listener');
 
-    logger.info({ sessionId: this.sessionId }, 'Starting workspace file watcher');
+    this.eventBus.on('session:file:modified', (data) => {
+      // Only handle events for this session
+      if (data.sessionId !== this.sessionId) return;
 
-    (async () => {
-      try {
-        for await (const file of this.sandbox!.streamWorkspaceFileChanges()) {
-          logger.debug({
-            sessionId: this.sessionId,
-            path: file.path,
-            contentLength: file.content?.length ?? 0
-          }, 'Received workspace file event');
+      logger.debug({
+        sessionId: this.sessionId,
+        path: data.file.path,
+        contentLength: data.file.content?.length ?? 0
+      }, 'Received workspace file event from EventBus');
 
-          const existingIndex = this.workspaceFiles.findIndex(f => f.path === file.path);
-          if (existingIndex >= 0) {
-            this.workspaceFiles[existingIndex] = file;
-          } else {
-            this.workspaceFiles.push(file);
-          }
-
-          logger.info({
-            sessionId: this.sessionId,
-            path: file.path
-          }, 'Emitting session:file:modified event');
-
-          this.eventBus.emit('session:file:modified', {
-            sessionId: this.sessionId,
-            file
-          });
-        }
-
-        logger.warn({ sessionId: this.sessionId }, 'Workspace file watcher loop ended - iterator exhausted');
-      } catch (error) {
-        logger.error({ error, sessionId: this.sessionId }, 'Workspace file watcher failed');
+      // Update internal state
+      const existingIndex = this.workspaceFiles.findIndex(f => f.path === data.file.path);
+      if (existingIndex >= 0) {
+        this.workspaceFiles[existingIndex] = data.file;
+      } else {
+        this.workspaceFiles.push(data.file);
       }
-    })();
+    });
   }
 
-  private startSessionTranscriptWatcher(): void {
-    if (!this.sandbox) return;
+  /**
+   * Set up listener for transcript change events from EventBus.
+   * AgentSandbox emits transcript events directly to EventBus, we parse and update internal state.
+   */
+  private setupTranscriptListener(): void {
+    logger.info({ sessionId: this.sessionId }, 'Setting up transcript listener');
 
-    (async () => {
-      try {
-        for await (const transcriptContent of this.sandbox!.streamSessionTranscriptChanges(this.sessionId)) {
-          this.rawTranscript = transcriptContent;
+    this.eventBus.on('session:transcript:changed', async (data) => {
+      // Only handle events for this session
+      if (data.sessionId !== this.sessionId) return;
 
-          // Parse blocks via sandbox
-          const parsed = await this.sandbox!.parseSessionTranscripts();
+      logger.debug({
+        sessionId: this.sessionId,
+        path: data.path,
+        contentLength: data.content.length
+      }, 'Received transcript change event from EventBus');
+
+      this.rawTranscript = data.content;
+
+      // Parse blocks via sandbox if available
+      if (this.sandbox) {
+        try {
+          const parsed = await this.sandbox.parseSessionTranscripts();
           this.blocks = parsed.blocks;
+        } catch (error) {
+          logger.error({ error, sessionId: this.sessionId }, 'Failed to parse transcripts');
         }
-      } catch (error) {
-        logger.error({ error, sessionId: this.sessionId }, 'Session transcript watcher failed');
       }
-    })();
+    });
   }
 
   private startPeriodicSync(): void {
