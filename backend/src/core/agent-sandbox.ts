@@ -335,6 +335,13 @@ export class AgentSandbox {
         continue;
       }
 
+      logger.info({
+        sessionId: this.sessionId,
+        path: event.path,
+        type: event.type,
+        contentLength: event.content.length
+      }, 'Yielding workspace file change');
+
       yield {
         path: event.path,
         content: event.content

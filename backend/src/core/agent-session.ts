@@ -521,9 +521,18 @@ export class AgentSession {
 
   private startWorkspaceFileWatcher(): void {
     if (!this.sandbox) return;
+
+    logger.info({ sessionId: this.sessionId }, 'Starting workspace file watcher');
+
     (async () => {
       try {
         for await (const file of this.sandbox!.streamWorkspaceFileChanges()) {
+          logger.debug({
+            sessionId: this.sessionId,
+            path: file.path,
+            contentLength: file.content?.length ?? 0
+          }, 'Received workspace file event');
+
           const existingIndex = this.workspaceFiles.findIndex(f => f.path === file.path);
           if (existingIndex >= 0) {
             this.workspaceFiles[existingIndex] = file;
@@ -531,11 +540,18 @@ export class AgentSession {
             this.workspaceFiles.push(file);
           }
 
+          logger.info({
+            sessionId: this.sessionId,
+            path: file.path
+          }, 'Emitting session:file:modified event');
+
           this.eventBus.emit('session:file:modified', {
             sessionId: this.sessionId,
             file
           });
         }
+
+        logger.warn({ sessionId: this.sessionId }, 'Workspace file watcher loop ended - iterator exhausted');
       } catch (error) {
         logger.error({ error, sessionId: this.sessionId }, 'Workspace file watcher failed');
       }

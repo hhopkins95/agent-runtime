@@ -230,11 +230,21 @@ export function setupEventListeners(
    * File modified in workspace
    */
   eventBus.on('session:file:modified', (data) => {
-    io.to(`session:${data.sessionId}`).emit('session:file:modified', {
+    const roomName = `session:${data.sessionId}`;
+    const room = io.sockets.adapter.rooms.get(roomName);
+    const socketCount = room?.size ?? 0;
+
+    logger.info({
+      sessionId: data.sessionId,
+      path: data.file.path,
+      room: roomName,
+      socketCount
+    }, 'Broadcasting file:modified event');
+
+    io.to(roomName).emit('session:file:modified', {
       sessionId: data.sessionId,
       file: data.file,
     });
-    logger.debug({ sessionId: data.sessionId, path: data.file.path }, 'Broadcast file modified');
   });
 
   /**
