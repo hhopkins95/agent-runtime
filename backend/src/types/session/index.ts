@@ -1,6 +1,6 @@
 import type { ConversationBlock } from "./blocks";
 
-export type AGENT_ARCHITECTURE_TYPE = "claude-agent-sdk" | "gemini-cli"
+export type AGENT_ARCHITECTURE_TYPE = "claude-agent-sdk" | "gemini-cli" | "opencode"
 
 /**
  * A file in the workspace during the session
