@@ -333,9 +333,13 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
             };
         });
 
+        // Filter out placeholder subagent files (Claude Code creates shell files with only 1 block
+        // when the CLI starts, before any real work is done)
+        const filteredSubagents = subagentBlocks.filter((subagent) => subagent.blocks.length > 1);
+
         return {
             blocks: mainBlocks,
-            subagents: subagentBlocks,
+            subagents: filteredSubagents,
         };
     }
 
