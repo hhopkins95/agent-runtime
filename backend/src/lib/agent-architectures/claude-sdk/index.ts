@@ -225,7 +225,17 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
                 const filename = basename(file);
                 const subagentId = filename.replace('.jsonl', '');
                 const content = await this.sandbox.readFile(file);
-                subagents.push({ id: subagentId, transcript: content ?? "" });
+                const transcript = content ?? "";
+
+                // Filter out placeholder subagent files at read level
+                // Claude Code creates shell files with only 1 JSONL line when CLI starts
+                const lines = transcript.trim().split('\n').filter(l => l.trim().length > 0);
+                if (lines.length <= 1) {
+                    logger.debug({ subagentId, lines: lines.length }, 'Skipping placeholder subagent transcript');
+                    continue;
+                }
+
+                subagents.push({ id: subagentId, transcript });
             }
 
             return {

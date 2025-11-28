@@ -27,8 +27,7 @@ graph TB
             EB[EventBus]
         end
 
-        subgraph Sandbox["Sandbox Layer"]
-            AGS[AgentSandbox]
+        subgraph Adapters["Adapters"]
             AAA[AgentArchitectureAdapter]
             SP[SandboxPrimitive]
         end
@@ -52,9 +51,8 @@ graph TB
     AS --> EB
     EB --> WS
 
-    AS --> AGS
-    AGS --> AAA
-    AGS --> SP
+    AS --> AAA
+    AS --> SP
     SP --> MODAL
 
     SM --> PA
@@ -97,57 +95,41 @@ classDiagram
 
 **Location:** `backend/src/core/agent-session.ts`
 
-**Responsibility:** Manages individual session lifecycle, sandbox creation, and message execution.
+**Responsibility:** Manages individual session lifecycle, sandbox/adapter creation, file watching, and message execution.
 
 ```mermaid
 classDiagram
     class AgentSession {
         +sessionId: string
-        -sandbox: AgentSandbox?
+        -sandboxPrimitive: SandboxPrimitive?
+        -adapter: AgentArchitectureAdapter?
         -blocks: ConversationBlock[]
         -workspaceFiles: WorkspaceFile[]
         -subagents: SubagentData[]
         -rawTranscript: string?
+        -sandboxStatus: SandboxStatus?
         +create(input, deps) AgentSession$
         +sendMessage(message) void
         +getState() RuntimeSessionData
-        +getListData() SessionListItem
         +getRuntimeState() SessionRuntimeState
+        +syncToStorage() void
         +destroy() void
         -activateSandbox() void
-        -deactivateSandbox() void
+        -setupSessionFiles() void
+        -startWatchers() void
+        -handleWorkspaceFileChange(event) void
+        -handleTranscriptFileChange(event) void
     }
 ```
 
 **Key Operations:**
-- `create()` - Static factory, loads data from persistence, parses transcript (no sandbox)
-- `sendMessage()` - Creates sandbox if needed, executes agent query
-- `activateSandbox()` - Private method to create sandbox on demand
-- `deactivateSandbox()` - Terminates sandbox, keeps session in memory
+- `create()` - Static factory, loads data from persistence, parses transcript using `parseTranscripts()` helper (no sandbox)
+- `sendMessage()` - Creates sandbox if needed, executes agent query via adapter
+- `activateSandbox()` - Creates sandbox primitive and adapter, sets up files and watchers
+- `setupSessionFiles()` - Writes transcripts, agent profile, and workspace files to sandbox
+- `startWatchers()` - Sets up file watchers for workspace and transcript directories
+- `handleWorkspaceFileChange()` / `handleTranscriptFileChange()` - Direct watcher callbacks that update state and persist
 - `destroy()` - Full cleanup (sync + terminate sandbox + ready for removal from SessionManager)
-
-### AgentSandbox
-
-**Location:** `backend/src/core/agent-sandbox.ts`
-
-**Responsibility:** Unified wrapper around Modal sandbox with agent-specific operations.
-
-```mermaid
-classDiagram
-    class AgentSandbox {
-        -sandbox: SandboxPrimitive
-        -architectureAdapter: AgentArchitectureAdapter
-        -sessionId: string
-        +create(props) AgentSandbox$
-        +executeQuery(prompt) AsyncGenerator~StreamEvent~
-        +streamWorkspaceFileChanges() AsyncGenerator~WorkspaceFile~
-        +streamSessionTranscriptChanges() AsyncGenerator~string~
-        +heartbeat() number?
-        +terminate() void
-        +readSessionTranscripts() TranscriptData
-        +parseSessionTranscripts() ParsedBlocks
-    }
-```
 
 ### EventBus
 
@@ -323,7 +305,8 @@ sequenceDiagram
     participant REST
     participant SM as SessionManager
     participant AS as AgentSession
-    participant AGS as AgentSandbox
+    participant SP as SandboxPrimitive
+    participant AAA as ArchitectureAdapter
     participant Modal
     participant EB as EventBus
     participant WS as WebSocket
@@ -335,19 +318,19 @@ sequenceDiagram
 
     alt No sandbox exists
         AS->>AS: activateSandbox()
-        AS->>EB: emit('session:status', { sandbox: { status: 'starting' } })
-        EB->>WS: broadcast to session room
-        AS->>AGS: AgentSandbox.create(props)
-        AGS->>Modal: Create sandbox
-        Modal-->>AGS: Sandbox instance
-        AGS->>AGS: Setup transcripts, profile, files
-        AGS-->>AS: AgentSandbox
-        AS->>EB: emit('session:status', { sandbox: { status: 'ready' } })
+        AS->>EB: emit('session:status', { status: 'starting' })
+        AS->>SP: createSandbox(props)
+        SP->>Modal: Create sandbox
+        Modal-->>SP: Sandbox instance
+        AS->>AAA: Create adapter
+        AS->>AS: setupSessionFiles()
+        AS->>AS: startWatchers()
+        AS->>EB: emit('session:status', { status: 'ready' })
     end
 
-    AS->>AGS: executeQuery(message)
+    AS->>AAA: executeQuery(message)
     loop Stream events
-        AGS-->>AS: StreamEvent
+        AAA-->>AS: StreamEvent
         AS->>EB: emit('session:block:*')
         EB->>WS: broadcast to session room
         WS->>Client: block events
@@ -361,7 +344,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Modal
-    participant AGS as AgentSandbox
+    participant SP as SandboxPrimitive
     participant AS as AgentSession
     participant SM as SessionManager
     participant PA as PersistenceAdapter
@@ -371,20 +354,21 @@ sequenceDiagram
     Modal->>Modal: Terminate sandbox
 
     loop Health check interval
-        AS->>AGS: heartbeat()
-        AGS->>Modal: poll()
-        Modal-->>AGS: exitCode (non-null = terminated)
-        AGS-->>AS: exitCode
+        AS->>SP: poll()
+        SP->>Modal: poll()
+        Modal-->>SP: exitCode (non-null = terminated)
+        SP-->>AS: exitCode
     end
 
     Note over AS: Sandbox terminated detected
     AS->>EB: emit('session:status', { sandbox: { status: 'terminated' } })
-    AS->>AS: deactivateSandbox()
+    AS->>AS: stopWatchersAndJobs()
 
     Note over SM: Could trigger full unload
     SM->>AS: destroy()
     AS->>PA: saveTranscript()
     AS->>PA: saveWorkspaceFiles()
+    AS->>SP: terminate()
     AS-->>SM: void
     SM->>SM: loadedSessions.delete(sessionId)
     SM->>EB: emit('session:status', { isLoaded: false, sandbox: null })
@@ -522,7 +506,7 @@ classDiagram
     AgentArchitectureAdapter <|.. GeminiCLIAdapter
 ```
 
-**Static Parsing:** Both adapters have a static `parseTranscripts()` method accessible via `getArchitectureParser(type)` factory function. This allows parsing transcripts without a sandbox.
+**Static Parsing:** Both adapters have a static `parseTranscripts()` method accessible via the `parseTranscripts(architecture, raw, subagents)` factory function in `factory.ts`. This allows parsing transcripts without a sandbox.
 
 ---
 
@@ -588,3 +572,13 @@ interface PersistenceAdapter {
 - `PersistedSessionListData` / `PersistedSessionData` - no runtime fields
 - `SessionListItem` / `RuntimeSessionData` - extends persisted with `runtime: SessionRuntimeState`
 - SessionManager enriches persistence data before returning to clients
+
+### 5. Direct Sandbox Management
+
+**Rationale:** AgentSession directly manages `SandboxPrimitive` and `AgentArchitectureAdapter` without an intermediate wrapper class. This simplifies the architecture by removing unnecessary indirection.
+
+**Implementation:**
+- `activateSandbox()` creates both sandbox and adapter
+- File watchers are set up directly in AgentSession
+- Watcher callbacks update session state directly, then emit events for clients
+- No event round-trips for internal state updates
