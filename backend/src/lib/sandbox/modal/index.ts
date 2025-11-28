@@ -1,9 +1,22 @@
 import { Sandbox } from "modal";
-import { SandboxPrimitive, WriteFilesResult } from "../base";
+import { SandboxPrimitive, WriteFilesResult, WatchEvent, WatchEventType } from "../base";
 import { AgentProfile } from "../../../types/agent-profiles";
 import { ModalContext } from "./client";
 import { createModalSandbox } from "./create-sandbox";
 import { AGENT_ARCHITECTURE_TYPE } from "../../../types/session/index";
+
+/**
+ * Internal event format from file-watcher.ts
+ */
+interface FileWatcherEvent {
+    path: string;
+    type: WatchEventType | 'ready' | 'error';
+    content: string | null;
+    timestamp: number;
+    message?: string;
+    stack?: string;
+    watched?: string;
+}
 
 
 export class ModalSandbox implements SandboxPrimitive {
@@ -172,6 +185,75 @@ export class ModalSandbox implements SandboxPrimitive {
         return stdout.trim().split('\n').filter(Boolean);
     }
 
+    /**
+     * Watch a directory for file changes.
+     * Promise resolves when watcher is ready.
+     * Callback is invoked for each file change event.
+     * Cleanup is automatic on terminate().
+     */
+    async watch(path: string, callback: (event: WatchEvent) => void): Promise<void> {
+        const watcherProcess = await this.sandbox.exec([
+            'tsx', '/app/file-watcher.ts', '--root', path
+        ]);
 
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error(`Watcher timeout - no ready event received for path: ${path}`));
+            }, 30000);
+
+            // Start consuming the stream in the background
+            // Modal streams yield strings directly (not binary)
+            (async () => {
+                const reader = watcherProcess.stdout.getReader();
+                let buffer = '';
+
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        // Modal streams yield strings directly
+                        buffer += value;
+
+                        // Process complete lines
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+                        for (const line of lines) {
+                            if (!line.trim()) continue;
+
+                            try {
+                                const event: FileWatcherEvent = JSON.parse(line);
+
+                                if (event.type === 'ready') {
+                                    clearTimeout(timeout);
+                                    resolve();
+                                    continue;
+                                }
+
+                                if (event.type === 'error') {
+                                    console.error(`[watch] Error from watcher: ${event.message}`);
+                                    continue;
+                                }
+
+                                // Convert to WatchEvent and invoke callback
+                                const watchEvent: WatchEvent = {
+                                    type: event.type as WatchEventType,
+                                    path: event.path,
+                                    content: event.content ?? undefined,
+                                };
+                                callback(watchEvent);
+                            } catch (parseError) {
+                                console.error(`[watch] Failed to parse event: ${line}`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    clearTimeout(timeout);
+                    console.error(`[watch] Stream error:`, error);
+                }
+            })();
+        });
+    }
 
 }

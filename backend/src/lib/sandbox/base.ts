@@ -6,6 +6,14 @@ export interface WriteFilesResult {
     failed: { path: string; error: string }[];
 }
 
+export type WatchEventType = 'add' | 'change' | 'unlink';
+
+export interface WatchEvent {
+    type: WatchEventType;
+    path: string;
+    content?: string;  // present for 'add' and 'change', undefined for 'unlink'
+}
+
 export interface SandboxPrimitive { 
 
     getId : () => string,
@@ -50,5 +58,16 @@ export interface SandboxPrimitive {
     poll : () => Promise<number | null>,
 
     terminate : () => Promise<void>,
+
+    /**
+     * Watch a directory for file changes.
+     * Callback is invoked for each file change event.
+     * Promise resolves when watcher is ready.
+     * Cleanup is automatic on terminate().
+     *
+     * @param path - Directory path to watch
+     * @param callback - Function called for each file change event
+     */
+    watch : (path: string, callback: (event: WatchEvent) => void) => Promise<void>,
 
 }

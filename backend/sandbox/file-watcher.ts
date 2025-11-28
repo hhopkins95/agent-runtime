@@ -14,7 +14,7 @@
  * Event format (JSONL - one JSON object per line):
  * {
  *   path: string,              // relative to root
- *   type: 'created' | 'updated' | 'deleted',
+ *   type: 'add' | 'change' | 'unlink',
  *   content: string | null,    // file content or null (binary/deleted/>1MB)
  *   timestamp: number
  * }
@@ -98,7 +98,7 @@ async function readFileContent(filePath: string): Promise<string | null> {
  * Debounce file change events
  * Ensures rapid changes to the same file only emit one event
  */
-async function debounceEvent(type: 'created' | 'updated' | 'deleted', absolutePath: string) {
+async function debounceEvent(type: 'add' | 'change' | 'unlink', absolutePath: string) {
   const key = `${type}:${absolutePath}`;
 
   // Clear existing timer if any
@@ -113,7 +113,7 @@ async function debounceEvent(type: 'created' | 'updated' | 'deleted', absolutePa
       pending.delete(key);
 
       // Read file content (null for deleted files)
-      const content = type === 'deleted' ? null : await readFileContent(absolutePath);
+      const content = type === 'unlink' ? null : await readFileContent(absolutePath);
 
       // Make path relative to root
       const relativePath = path.relative(rootPath, absolutePath);
@@ -177,13 +177,13 @@ const watcher = chokidar.watch(
 // Register event handlers
 watcher
   .on('add', (filePath) => {
-    debounceEvent('created', filePath);
+    debounceEvent('add', filePath);
   })
   .on('change', (filePath) => {
-    debounceEvent('updated', filePath);
+    debounceEvent('change', filePath);
   })
   .on('unlink', (filePath) => {
-    debounceEvent('deleted', filePath);
+    debounceEvent('unlink', filePath);
   })
   .on('error', (error) => {
     emitError(error as Error);
