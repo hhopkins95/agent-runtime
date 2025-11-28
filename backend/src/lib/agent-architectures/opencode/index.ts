@@ -138,7 +138,61 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeMessage
         }
       }
 
-      // 4. OpenCode configuration file
+      // 4. Skills → .opencode/skills/{skillName}/
+      // Uses the opencode-skills plugin (https://github.com/malhashemi/opencode-skills)
+      // which implements Anthropic's Skills specification
+      if (profile.skills && profile.skills.length > 0) {
+        const skillsDir = `${paths.AGENT_PROFILE_DIR}/skills`;
+        for (const skill of profile.skills) {
+          const skillDir = `${skillsDir}/${skill.name}`;
+
+          // Create SKILL.md with frontmatter
+          const skillContent = [
+            '---',
+            `name: ${skill.name}`,
+            `description: "${skill.description.replace(/"/g, '\\"')}"`,
+            '---',
+            '',
+            skill.skillMd,
+          ].join('\n');
+
+          filesToWrite.push({
+            path: `${skillDir}/SKILL.md`,
+            content: skillContent,
+          });
+
+          // Add supporting files
+          if (skill.supportingFiles && skill.supportingFiles.length > 0) {
+            for (const file of skill.supportingFiles) {
+              filesToWrite.push({
+                path: `${skillDir}/${file.relativePath}`,
+                content: file.content,
+              });
+            }
+          }
+        }
+      }
+
+      // 5. OpenCode configuration file
+      // Include opencode-skills plugin if skills are defined
+      const plugins: string[] = [];
+      if (profile.skills && profile.skills.length > 0) {
+        plugins.push('opencode-skills');
+      }
+
+      // Build MCP server configuration if present
+      // OpenCode uses a slightly different MCP config format than Claude SDK
+      let mcpConfig: Record<string, unknown> | undefined;
+      if (profile.mcp && profile.mcp.length > 0) {
+        mcpConfig = {
+          stdio: profile.mcp.map((server) => ({
+            command: server.command,
+            args: server.args || [],
+            ...(server.env && { env: server.env }),
+          })),
+        };
+      }
+
       filesToWrite.push({
         path: `${paths.AGENT_PROFILE_DIR}/opencode.json`,
         content: JSON.stringify(
@@ -150,6 +204,8 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeMessage
               edit: 'allow',
               external_directory: false,
             },
+            ...(plugins.length > 0 && { plugin: plugins }),
+            ...(mcpConfig && { mcp: mcpConfig }),
           },
           null,
           2
