@@ -334,53 +334,6 @@ export class AgentSandbox {
 
   async readSessionTranscripts() {
     return await this.architectureAdapter.readSessionTranscripts({});
-    // const paths = this.getSandboxPaths();
-    // const transcriptFiles = await this.sandbox.listFiles(paths.AGENT_STORAGE_DIR);
-
-
-    // if (this.agentProfile.type === 'claude-agent-sdk') {
-    //   const mainTranscriptFilePath = transcriptFiles.find(path => path.includes(this.sessionId) && path.endsWith('.jsonl'));
-    //   if (!mainTranscriptFilePath) {
-    //     throw new Error(`Main transcript file not found for session ${this.sessionId}`);
-    //   }
-    //   const mainTranscriptContent = await this.sandbox.readFile(mainTranscriptFilePath);
-
-    //   // The rest of the paths are the subagent transcripts
-    //   const subagentTranscriptFilePaths = transcriptFiles.filter(p => p !== mainTranscriptFilePath);
-
-    //   const subagents = await Promise.all(subagentTranscriptFilePaths.map(async path => {
-    //     // agent id is the last part of the path
-    //     const agentId = path.split('/').pop();
-    //     if (!agentId) {
-    //       throw new Error(`Agent id not found in path ${path}`);
-    //     }
-    //     const agentTranscriptContent = await this.sandbox.readFile(path);
-    //     return {
-    //       id: agentId,
-    //       transcript : agentTranscriptContent
-    //     }
-    //   }));
-
-
-    //   return {
-    //     main : mainTranscriptContent,
-    //     subagents : subagents
-    //   }
-
-    // }
-
-    // if (this.agentProfile.type === 'gemini-cli') {
-    //   const mainPath = transcriptFiles.find(file => file.includes(this.TRANSCRIPT_FILE_NAME));
-    //   if (!mainPath) {
-    //     throw new Error(`Main transcript file not found for session ${this.sessionId}`);
-    //   }
-    //   const mainTranscriptContent = await this.sandbox.readFile(mainPath);
-    //   return {
-    //     main : mainTranscriptContent,
-    //     subagents : []
-    //   }
-    // }
-
   }
 
   /**
