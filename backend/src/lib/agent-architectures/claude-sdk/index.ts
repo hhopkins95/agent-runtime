@@ -1,4 +1,5 @@
 import { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { basename } from "path";
 import { AgentArchitectureAdapter } from "../base.js";
 import { AgentProfile } from "../../../types/agent-profiles.js";
 import { StreamEvent } from "../../../types/session/streamEvents.js";
@@ -217,7 +218,9 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
             // Read all subagent transcripts
             const subagents: {id: string, transcript: string}[] = [];
             for (const file of files) {
-                const subagentId = file.replace('.jsonl', '');
+                // Extract just the filename (listFiles with find returns full paths)
+                const filename = basename(file);
+                const subagentId = filename.replace('.jsonl', '');
                 const content = await this.sandbox.readFile(file);
                 subagents.push({ id: subagentId, transcript: content ?? "" });
             }
