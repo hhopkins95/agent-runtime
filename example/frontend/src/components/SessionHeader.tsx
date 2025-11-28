@@ -162,6 +162,12 @@ export function SessionHeader({ sessionId, onDelete }: SessionHeaderProps) {
             <span className={`text-xs px-2 py-0.5 rounded ${getStatusColor(session)}`}>
               {getDisplayStatus(session)}
             </span>
+            {/* Show statusMessage alongside status badge */}
+            {session.runtime.sandbox?.statusMessage && (
+              <span className="text-xs text-gray-500 italic">
+                {session.runtime.sandbox.statusMessage}
+              </span>
+            )}
           </div>
 
           {/* Sandbox ID (if exists) */}
