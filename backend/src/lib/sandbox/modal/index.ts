@@ -224,7 +224,16 @@ export class ModalSandbox implements SandboxPrimitive {
                             continue;
                         }
 
-                        logger.info({ eventType, filePath, watchPath }, 'File change detected');
+                        // Convert absolute path to relative path
+                        let relativePath = filePath;
+                        if (filePath.startsWith(watchPath)) {
+                            relativePath = filePath.slice(watchPath.length);
+                            if (relativePath.startsWith('/')) {
+                                relativePath = relativePath.slice(1);
+                            }
+                        }
+
+                        logger.info({ eventType, filePath, relativePath, watchPath }, 'File change detected');
 
                         // Read content for add/change events
                         let content: string | undefined;
@@ -238,7 +247,7 @@ export class ModalSandbox implements SandboxPrimitive {
 
                         const watchEvent: WatchEvent = {
                             type: eventType,
-                            path: filePath,
+                            path: relativePath,
                             content,
                         };
                         callback(watchEvent);

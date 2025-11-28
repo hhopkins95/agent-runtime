@@ -530,7 +530,7 @@ export class AgentSession {
   private setupWorkspaceFileListener(): void {
     logger.info({ sessionId: this.sessionId }, 'Setting up workspace file listener');
 
-    this.eventBus.on('session:file:modified', (data) => {
+    this.eventBus.on('session:file:modified', async (data) => {
       // Only handle events for this session
       if (data.sessionId !== this.sessionId) return;
 
@@ -546,6 +546,14 @@ export class AgentSession {
         this.workspaceFiles[existingIndex] = data.file;
       } else {
         this.workspaceFiles.push(data.file);
+      }
+
+      // Persist immediately
+      try {
+        await this.persistenceAdapter.saveWorkspaceFile(this.sessionId, data.file);
+        logger.debug({ sessionId: this.sessionId, path: data.file.path }, 'Persisted workspace file');
+      } catch (error) {
+        logger.error({ error, sessionId: this.sessionId, path: data.file.path }, 'Failed to persist workspace file');
       }
     });
   }
@@ -577,6 +585,14 @@ export class AgentSession {
         } catch (error) {
           logger.error({ error, sessionId: this.sessionId }, 'Failed to parse transcripts');
         }
+      }
+
+      // Persist immediately
+      try {
+        await this.persistenceAdapter.saveTranscript(this.sessionId, data.content);
+        logger.debug({ sessionId: this.sessionId, path: data.path }, 'Persisted transcript');
+      } catch (error) {
+        logger.error({ error, sessionId: this.sessionId, path: data.path }, 'Failed to persist transcript');
       }
     });
   }
