@@ -4,19 +4,7 @@ import { AgentProfile } from "../../../types/agent-profiles";
 import { ModalContext } from "./client";
 import { createModalSandbox } from "./create-sandbox";
 import { AGENT_ARCHITECTURE_TYPE } from "../../../types/session/index";
-
-/**
- * Internal event format from file-watcher.ts
- */
-interface FileWatcherEvent {
-    path: string;
-    type: WatchEventType | 'ready' | 'error';
-    content: string | null;
-    timestamp: number;
-    message?: string;
-    stack?: string;
-    watched?: string;
-}
+import { logger } from "../../../config/logger";
 
 
 export class ModalSandbox implements SandboxPrimitive {
@@ -187,73 +175,81 @@ export class ModalSandbox implements SandboxPrimitive {
 
     /**
      * Watch a directory for file changes.
-     * Promise resolves when watcher is ready.
+     * Promise resolves immediately when watcher process starts.
      * Callback is invoked for each file change event.
      * Cleanup is automatic on terminate().
      */
-    async watch(path: string, callback: (event: WatchEvent) => void): Promise<void> {
+    async watch(watchPath: string, callback: (event: WatchEvent) => void): Promise<void> {
+        // Use chokidar-cli with polling for container compatibility
+        // Output format: "event:path" (e.g., "add:/workspace/file.txt")
         const watcherProcess = await this.sandbox.exec([
-            'tsx', '/app/file-watcher.ts', '--root', path
+            'npx', 'chokidar-cli', `${watchPath}/**/*`, '--polling'
         ]);
 
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error(`Watcher timeout - no ready event received for path: ${path}`));
-            }, 30000);
+        logger.info({ watchPath }, 'File watcher started');
 
-            // Start consuming the stream in the background
-            // Modal streams yield strings directly (not binary)
-            (async () => {
-                const reader = watcherProcess.stdout.getReader();
-                let buffer = '';
+        // Start consuming the stream in the background
+        (async () => {
+            const reader = watcherProcess.stdout.getReader();
+            let buffer = '';
 
-                try {
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
 
-                        // Modal streams yield strings directly
-                        buffer += value;
+                    buffer += value;
 
-                        // Process complete lines
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+                    // Process complete lines
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
 
-                        for (const line of lines) {
-                            if (!line.trim()) continue;
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed) continue;
 
+                        // chokidar-cli format: "event:path"
+                        const colonIndex = trimmed.indexOf(':');
+                        if (colonIndex === -1) {
+                            logger.warn({ line: trimmed }, 'Unexpected watcher output format');
+                            continue;
+                        }
+
+                        const eventType = trimmed.slice(0, colonIndex) as WatchEventType;
+                        const filePath = trimmed.slice(colonIndex + 1);
+
+                        // Validate event type
+                        if (!['add', 'change', 'unlink'].includes(eventType)) {
+                            logger.debug({ eventType, filePath }, 'Skipping non-file event');
+                            continue;
+                        }
+
+                        logger.info({ eventType, filePath, watchPath }, 'File change detected');
+
+                        // Read content for add/change events
+                        let content: string | undefined;
+                        if (eventType !== 'unlink') {
                             try {
-                                const event: FileWatcherEvent = JSON.parse(line);
-
-                                if (event.type === 'ready') {
-                                    clearTimeout(timeout);
-                                    resolve();
-                                    continue;
-                                }
-
-                                if (event.type === 'error') {
-                                    console.error(`[watch] Error from watcher: ${event.message}`);
-                                    continue;
-                                }
-
-                                // Convert to WatchEvent and invoke callback
-                                const watchEvent: WatchEvent = {
-                                    type: event.type as WatchEventType,
-                                    path: event.path,
-                                    content: event.content ?? undefined,
-                                };
-                                callback(watchEvent);
-                            } catch (parseError) {
-                                console.error(`[watch] Failed to parse event: ${line}`);
+                                content = await this.readFile(filePath) ?? undefined;
+                            } catch (err) {
+                                logger.warn({ filePath, error: err }, 'Failed to read file content');
                             }
                         }
+
+                        const watchEvent: WatchEvent = {
+                            type: eventType,
+                            path: filePath,
+                            content,
+                        };
+                        callback(watchEvent);
                     }
-                } catch (error) {
-                    clearTimeout(timeout);
-                    console.error(`[watch] Stream error:`, error);
                 }
-            })();
-        });
+            } catch (error) {
+                logger.error({ error, watchPath }, 'Watch stream error');
+            }
+        })();
+
+        // Resolve immediately - chokidar-cli doesn't emit a ready event
     }
 
 }

@@ -131,6 +131,8 @@ export async function createModalSandbox(
         'RUN npm install -g @google/gemini-cli',
 
         'RUN npm install -g tsx',
+
+        'RUN npm install -g chokidar-cli',
         // Set working directory to /workspace for SDK operations
         `WORKDIR ${workdir}`
       ])
