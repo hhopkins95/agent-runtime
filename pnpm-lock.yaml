@@ -29,6 +29,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.14.2
         version: 1.19.6(hono@4.10.6)
+      '@hono/zod-validator':
+        specifier: ^0.7.5
+        version: 0.7.5(hono@4.10.6)(zod@3.25.76)
       '@opencode-ai/sdk':
         specifier: ^1.0.120
         version: 1.0.120
@@ -520,6 +523,12 @@ packages:
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
+
+  '@hono/zod-validator@0.7.5':
+    resolution: {integrity: sha512-n4l4hutkfYU07PzRUHBOVzUEn38VSfrh+UVE5d0w4lyfWDOEhzxIupqo5iakRiJL44c3vTuFJBvcmUl8b9agIA==}
+    peerDependencies:
+      hono: '>=3.9.0'
+      zod: ^3.25.0 || ^4.0.0
 
   '@humanwhocodes/config-array@0.13.0':
     resolution: {integrity: sha512-DZLEEqFWQFiyK6h5YIeynKx7JlvCYWL0cImfSRXZ9l4Sg2efkFGTuFf6vzXjK1cq6IYkU+Eg/JizXw+TD2vRNw==}
@@ -4001,6 +4010,11 @@ snapshots:
   '@hono/node-server@1.19.6(hono@4.10.6)':
     dependencies:
       hono: 4.10.6
+
+  '@hono/zod-validator@0.7.5(hono@4.10.6)(zod@3.25.76)':
+    dependencies:
+      hono: 4.10.6
+      zod: 3.25.76
 
   '@humanwhocodes/config-array@0.13.0':
     dependencies:

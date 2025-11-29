@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 import type { SessionManager } from "../../../core/session-manager";
 import type { EventBus } from "../../../core/event-bus";
 import { errorResponse } from "../server";
@@ -14,56 +16,43 @@ export function createSessionRoutes(
    * POST /api/sessions
    * Create a new session
    */
-  .post("/", async (c) => {
-    const body = await c.req.json();
-    const { agentProfileRef, architecture } = body;
+  .post(
+    "/",
+    zValidator(
+      "json",
+      z.object({
+        agentProfileRef: z.string(),
+        architecture: z.enum(["claude-agent-sdk", "gemini-cli"]),
+      })
+    ),
+    async (c) => {
+      const { agentProfileRef, architecture } = c.req.valid("json");
 
+      try {
+        const session = await sessionManager.createSession({ agentProfileRef, architecture });
+        const sessionData = session.getState();
 
-    if (!agentProfileRef || typeof agentProfileRef !== "string") {
-      throw new HTTPException(400, {
-        message: JSON.stringify(
-          errorResponse("Invalid request body", "INVALID_REQUEST", {
-            required: ["agentProfileRef"],
-          })
-        ),
-      });
+        return c.json(
+          {
+            sessionId: sessionData.sessionId,
+            runtime: sessionData.runtime,
+            createdAt: sessionData.createdAt,
+          },
+          201
+        );
+      } catch (error) {
+        throw new HTTPException(500, {
+          message: JSON.stringify(
+            errorResponse(
+              "Failed to create session",
+              "SESSION_CREATE_FAILED",
+              error instanceof Error ? error.message : String(error)
+            )
+          ),
+        });
+      }
     }
-
-    if (!architecture || (architecture !== "claude-agent-sdk" && architecture !== "gemini-cli")) {
-      throw new HTTPException(400, {
-        message: JSON.stringify(
-          errorResponse("Invalid request body", "INVALID_REQUEST", {
-            required: ["architecture"],
-            validValues: ["claude-agent-sdk", "gemini-cli"],
-          })
-        ),
-      });
-    }
-
-    try {
-      const session = await sessionManager.createSession({ agentProfileRef, architecture });
-      const sessionData = session.getState();
-
-      return c.json(
-        {
-          sessionId: sessionData.sessionId,
-          runtime: sessionData.runtime,
-          createdAt: sessionData.createdAt,
-        },
-        201
-      );
-    } catch (error) {
-      throw new HTTPException(500, {
-        message: JSON.stringify(
-          errorResponse(
-            "Failed to create session",
-            "SESSION_CREATE_FAILED",
-            error instanceof Error ? error.message : String(error)
-          )
-        ),
-      });
-    }
-  })
+  )
 
   /**
    * GET /api/sessions
