@@ -208,98 +208,20 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     main: string | null;
     subagents: { id: string; transcript: string }[];
   }> {
-    const paths = this.getPaths();
-    const storagePath = `${paths.AGENT_STORAGE_DIR}/storage`;
+    const result = await this.sandbox.exec(['opencode', 'export', this.sessionId]);
+    const exitCode = await result.wait();
+    const stdout = await result.stdout.getReader().read()
 
-    try {
-      // Read session file
-      const sessionPath = `${storagePath}/session/${this.projectId}/${this.sessionId}.json`;
-      const sessionJson = await this.sandbox.readFile(sessionPath);
-
-      if (!sessionJson) {
-        return { main: null, subagents: [] };
-      }
-
-      const session: OpenCodeSession = JSON.parse(sessionJson);
-
-      // Read all messages for this session
-      const messageDir = `${storagePath}/message/${this.sessionId}`;
-      const messageFiles = await this.sandbox.listFiles(messageDir, '*.json');
-
-      const messagesWithParts: OpenCodeMessageWithParts[] = [];
-
-      for (const msgFile of messageFiles) {
-        const msgJson = await this.sandbox.readFile(msgFile);
-        if (!msgJson) continue;
-
-        const message: OpenCodeMessage = JSON.parse(msgJson);
-
-        // Read parts for this message
-        const partDir = `${storagePath}/part/${message.id}`;
-        const partFiles = await this.sandbox.listFiles(partDir, '*.json');
-
-        const parts: OpenCodePart[] = [];
-        for (const partFile of partFiles) {
-          const partJson = await this.sandbox.readFile(partFile);
-          if (partJson) {
-            parts.push(JSON.parse(partJson));
-          }
-        }
-
-        // Sort parts by time if available
-        parts.sort((a, b) => {
-          const aTime = getPartStartTime(a);
-          const bTime = getPartStartTime(b);
-          return aTime - bTime;
-        });
-
-        messagesWithParts.push({ message, parts });
-      }
-
-      // Sort messages by creation time
-      messagesWithParts.sort((a, b) => {
-        return a.message.time.created - b.message.time.created;
-      });
-
-      // Calculate totals
-      let totalCost = 0;
-      let totalInputTokens = 0;
-      let totalOutputTokens = 0;
-
-      for (const { message } of messagesWithParts) {
-        if (message.role === 'assistant') {
-          totalCost += message.cost || 0;
-          totalInputTokens += message.tokens?.input || 0;
-          totalOutputTokens += message.tokens?.output || 0;
-        }
-      }
-
-      // Build our intermediate format
-      const transcript: OpenCodeSessionTranscript = {
-        version: 1,
-        sessionId: this.sessionId,
-        projectId: this.projectId,
-        session,
-        messages: messagesWithParts,
-        metadata: {
-          createdAt: new Date(session.time.created).toISOString(),
-          updatedAt: new Date(session.time.updated).toISOString(),
-          totalCost,
-          totalTokens: {
-            input: totalInputTokens,
-            output: totalOutputTokens,
-          },
-        },
-      };
-
-      return {
-        main: JSON.stringify(transcript),
-        subagents: [], // OpenCode handles subagents inline
-      };
-    } catch (error) {
-      logger.error({ error, sessionId: this.sessionId }, 'Error reading OpenCode session transcripts');
+    if (exitCode !== 0) {
+      const stderr = await result.stderr.getReader().read();
+      logger.error({ exitCode, stderr, sessionId: this.sessionId }, 'OpenCode export command failed');
       return { main: null, subagents: [] };
     }
+
+    return {
+      main: stdout.value || null,
+      subagents: [],
+    };
   }
 
   public async *executeQuery(args: { query: string }): AsyncGenerator<StreamEvent> {
@@ -459,22 +381,6 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
         return [];
     }
   }
-
-  private static mapToolStatus(status: string): 'pending' | 'running' | 'success' | 'error' {
-    switch (status) {
-      case 'pending':
-        return 'pending';
-      case 'running':
-        return 'running';
-      case 'completed':
-        return 'success';
-      case 'error':
-        return 'error';
-      default:
-        return 'pending';
-    }
-  }
-
 
 
   // Static methods
