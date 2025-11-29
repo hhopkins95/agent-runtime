@@ -14,6 +14,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { basename } from 'path';
 import { logger } from '../config/logger.js';
 import type { ModalContext } from '../lib/sandbox/modal/client.js';
 import type { PersistenceAdapter } from '../types/persistence-adapter.js';
@@ -28,9 +29,11 @@ import type {
   SandboxStatus,
 } from '../types/session/index.js';
 import type { ConversationBlock } from '../types/session/blocks.js';
-import { AgentSandbox } from './agent-sandbox.js';
 import type { EventBus } from './event-bus.js';
-import { getArchitectureParser } from '../lib/agent-architectures/factory.js';
+import type { SandboxPrimitive, WatchEvent } from '../lib/sandbox/base.js';
+import type { AgentArchitectureAdapter } from '../lib/agent-architectures/base.js';
+import { createSandbox } from '../lib/sandbox/factory.js';
+import { getAgentArchitectureAdapter, parseTranscripts } from '../lib/agent-architectures/factory.js';
 
 /**
  * Callback type for sandbox termination notification
@@ -44,8 +47,9 @@ export class AgentSession {
   // Identifiers
   public readonly sessionId: string;
 
-  // Modal sandbox (lazy - created on first sendMessage)
-  private sandbox?: AgentSandbox;
+  // Sandbox infrastructure (lazy - created on first sendMessage)
+  private sandboxPrimitive?: SandboxPrimitive;
+  private adapter?: AgentArchitectureAdapter;
   private sandboxId?: string;
   private sandboxStatus: SandboxStatus | null = null;
   private statusMessage?: string;
@@ -198,12 +202,11 @@ export class AgentSession {
 
     // For existing sessions, parse blocks using static parser (no sandbox needed)
     if ('savedSessionData' in session && session.savedSessionData.rawTranscript) {
-      const parser = getArchitectureParser(this.architecture);
       const subagentTranscripts = this.subagents.map(s => ({
         id: s.id,
         transcript: s.rawTranscript ?? '',
       }));
-      const parsed = parser(session.savedSessionData.rawTranscript, subagentTranscripts);
+      const parsed = parseTranscripts(this.architecture, session.savedSessionData.rawTranscript, subagentTranscripts);
       this.blocks = parsed.blocks;
       this.subagents = parsed.subagents.map(sub => ({
         id: sub.id,
@@ -222,49 +225,271 @@ export class AgentSession {
    * Lazily create sandbox when needed (private, called by sendMessage)
    */
   private async activateSandbox(): Promise<void> {
-    if (this.sandbox) return;
+    if (this.sandboxPrimitive) return;
 
     logger.info({ sessionId: this.sessionId }, 'Activating sandbox...');
 
     // Note: 'starting' status is already emitted by sendMessage() before calling this method
     // This ensures clients get immediate feedback before the sandbox creation process
 
-    // Build session data for sandbox creation
-    const savedSessionData: PersistedSessionData = {
-      sessionId: this.sessionId,
-      type: this.architecture,
-      agentProfileReference: this.agentProfile.id,
-      createdAt: this.createdAt,
-      lastActivity: this.lastActivity,
-      rawTranscript: this.rawTranscript,
-      subagents: this.subagents.map(s => ({ id: s.id, rawTranscript: s.rawTranscript })),
-      workspaceFiles: this.workspaceFiles,
-    };
-
-    this.sandbox = await AgentSandbox.create({
+    // Step 1: Create the sandbox primitive
+    this.emitRuntimeStatus("Creating sandbox container...");
+    this.sandboxPrimitive = await createSandbox({
+      provider: "modal",
       agentProfile: this.agentProfile,
       modalContext: this.modalContext,
-      eventBus: this.eventBus,
-      session: { savedSessionData },
-      onStatusChange: (message) => this.emitRuntimeStatus(message),
+      agentArchitecture: this.architecture,
     });
+    this.sandboxId = this.sandboxPrimitive.getId();
 
-    this.sandboxId = this.sandbox.getId();
-    this.sandboxStatus = 'ready';
-    this.lastHealthCheck = Date.now();
+    // Step 2: Create the architecture adapter
+    this.adapter = getAgentArchitectureAdapter(this.architecture, this.sandboxPrimitive, this.sessionId);
 
-    // Set up EventBus listeners for file and transcript events
-    // (AgentSandbox emits events directly to EventBus now)
-    this.setupWorkspaceFileListener();
-    this.setupTranscriptListener();
+    // Step 3: Setup session files
+    this.emitRuntimeStatus("Setting up session files...");
+    await this.setupSessionFiles();
 
-    // Start monitoring and sync
+    // Step 4: Start watchers
+    this.emitRuntimeStatus("Initializing file watchers...");
+    await this.startWatchers();
+
+    // Step 5: Start monitoring and sync
     this.startPeriodicSync();
     this.startHealthMonitoring();
 
+    this.sandboxStatus = 'ready';
+    this.lastHealthCheck = Date.now();
     this.emitRuntimeStatus("Ready");
 
     logger.info({ sessionId: this.sessionId, sandboxId: this.sandboxId }, 'Sandbox activated');
+  }
+
+  /**
+   * Setup session files in the sandbox (transcripts, profile, workspace files)
+   */
+  private async setupSessionFiles(): Promise<void> {
+    if (!this.adapter || !this.sandboxPrimitive) {
+      throw new Error('Cannot setup session files without adapter and sandbox');
+    }
+
+    // Run all file setup operations in parallel for better performance
+    await Promise.all([
+      // Setup transcripts
+      this.adapter.setupSessionTranscripts({
+        sessionId: this.sessionId,
+        mainTranscript: this.rawTranscript ?? '',
+        subagents: this.subagents.map(s => ({
+          id: s.id,
+          transcript: s.rawTranscript ?? '',
+        })),
+      }),
+      // Setup agent profile
+      this.adapter.setupAgentProfile({
+        agentProfile: this.agentProfile,
+      }),
+      // Setup workspace files
+      this.setupWorkspaceFiles(),
+    ]);
+  }
+
+  /**
+   * Write workspace files to the sandbox
+   */
+  private async setupWorkspaceFiles(): Promise<void> {
+    if (!this.sandboxPrimitive) return;
+
+    const files = [
+      ...(this.agentProfile.defaultWorkspaceFiles || []),
+      ...this.workspaceFiles,
+    ];
+
+    if (files.length === 0) return;
+
+    const basePaths = this.sandboxPrimitive.getBasePaths();
+    const filesToWrite = files.map(file => ({
+      path: `${basePaths.WORKSPACE_DIR}/${file.path}`,
+      content: file.content
+    }));
+
+    const result = await this.sandboxPrimitive.writeFiles(filesToWrite);
+    if (result.failed.length > 0) {
+      logger.warn({ failed: result.failed }, 'Some workspace files failed to write');
+    }
+  }
+
+  /**
+   * Start file watchers for workspace and transcript directories
+   */
+  private async startWatchers(): Promise<void> {
+    if (!this.sandboxPrimitive || !this.adapter) {
+      throw new Error('Cannot start watchers without sandbox and adapter');
+    }
+
+    const basePaths = this.sandboxPrimitive.getBasePaths();
+    const adapterPaths = this.adapter.getPaths();
+
+    logger.info({
+      sessionId: this.sessionId,
+      workspacePath: basePaths.WORKSPACE_DIR,
+      transcriptPath: adapterPaths.AGENT_STORAGE_DIR,
+    }, 'Starting file watchers...');
+
+    // Start both watchers and wait for them to be ready
+    await Promise.all([
+      this.sandboxPrimitive.watch(basePaths.WORKSPACE_DIR, (event) => {
+        this.handleWorkspaceFileChange(event);
+      }),
+      this.sandboxPrimitive.watch(adapterPaths.AGENT_STORAGE_DIR, (event) => {
+        this.handleTranscriptFileChange(event);
+      }),
+    ]);
+
+    logger.info({ sessionId: this.sessionId }, 'File watchers ready');
+  }
+
+  /**
+   * Handle workspace file change events directly
+   */
+  private handleWorkspaceFileChange(event: WatchEvent): void {
+    // Skip files with no content (unlink events or binary/large files)
+    if (event.content === undefined) {
+      logger.debug({ sessionId: this.sessionId, path: event.path, type: event.type }, 'Skipping file with no content');
+      return;
+    }
+
+    logger.debug({
+      sessionId: this.sessionId,
+      path: event.path,
+      type: event.type,
+      contentLength: event.content.length
+    }, 'Workspace file changed');
+
+    const file: WorkspaceFile = { path: event.path, content: event.content };
+
+    // Direct state update
+    const existingIndex = this.workspaceFiles.findIndex(f => f.path === file.path);
+    if (existingIndex >= 0) {
+      this.workspaceFiles[existingIndex] = file;
+    } else {
+      this.workspaceFiles.push(file);
+    }
+
+    // Persist immediately (fire and forget, log errors)
+    this.persistenceAdapter.saveWorkspaceFile(this.sessionId, file)
+      .then(() => logger.debug({ sessionId: this.sessionId, path: file.path }, 'Persisted workspace file'))
+      .catch(error => logger.error({ error, sessionId: this.sessionId, path: file.path }, 'Failed to persist workspace file'));
+
+    // Emit for WebSocket clients
+    this.eventBus.emit('session:file:modified', {
+      sessionId: this.sessionId,
+      file,
+    });
+  }
+
+  /**
+   * Handle transcript file change events directly
+   */
+  private handleTranscriptFileChange(event: WatchEvent): void {
+    // Skip files with no content
+    if (event.content === undefined) {
+      logger.debug({ sessionId: this.sessionId, path: event.path, type: event.type }, 'Skipping transcript with no content');
+      return;
+    }
+
+    if (!this.adapter) return;
+
+    const fileName = basename(event.path);
+    const identification = this.adapter.identifySessionTranscriptFile({ fileName, content: event.content });
+
+    if (!identification) {
+      logger.debug({ sessionId: this.sessionId, path: event.path }, 'Skipping non-transcript file');
+      return;
+    }
+
+    logger.debug({
+      sessionId: this.sessionId,
+      path: event.path,
+      type: event.type,
+      contentLength: event.content.length,
+      isMain: 'isMain' in identification,
+    }, 'Transcript file changed');
+
+    if ('isMain' in identification) {
+      // Main transcript changed
+      this.rawTranscript = event.content;
+
+      // Re-parse all transcripts
+      const subagentTranscripts = this.subagents.map(s => ({
+        id: s.id,
+        transcript: s.rawTranscript ?? '',
+      }));
+      const parsed = this.adapter.parseTranscripts(event.content, subagentTranscripts);
+      this.blocks = parsed.blocks;
+      // Update subagent blocks (keep rawTranscripts, update blocks)
+      this.subagents = parsed.subagents.map(sub => ({
+        id: sub.id,
+        blocks: sub.blocks,
+        rawTranscript: this.subagents.find(s => s.id === sub.id)?.rawTranscript,
+      }));
+
+      // Persist immediately
+      this.persistenceAdapter.saveTranscript(this.sessionId, event.content)
+        .then(() => logger.debug({ sessionId: this.sessionId, path: event.path }, 'Persisted main transcript'))
+        .catch(error => logger.error({ error, sessionId: this.sessionId, path: event.path }, 'Failed to persist main transcript'));
+
+      // Emit for WebSocket clients
+      this.eventBus.emit('session:transcript:changed', {
+        sessionId: this.sessionId,
+        content: event.content,
+        path: event.path,
+      });
+    } else {
+      // Subagent transcript changed
+      const { subagentId } = identification;
+
+      // Check if it's a placeholder (skip if ≤1 line)
+      const lines = event.content.trim().split('\n').filter(l => l.trim().length > 0);
+      if (lines.length <= 1) {
+        logger.debug({ sessionId: this.sessionId, subagentId, lines: lines.length }, 'Skipping placeholder subagent transcript');
+        return;
+      }
+
+      // Update subagent rawTranscript
+      const existingSubagent = this.subagents.find(s => s.id === subagentId);
+      if (existingSubagent) {
+        existingSubagent.rawTranscript = event.content;
+      } else {
+        this.subagents.push({
+          id: subagentId,
+          blocks: [],
+          rawTranscript: event.content,
+        });
+      }
+
+      // Re-parse all transcripts to get updated blocks
+      const subagentTranscripts = this.subagents.map(s => ({
+        id: s.id,
+        transcript: s.rawTranscript ?? '',
+      }));
+      const parsed = this.adapter.parseTranscripts(this.rawTranscript ?? '', subagentTranscripts);
+      this.subagents = parsed.subagents.map(sub => ({
+        id: sub.id,
+        blocks: sub.blocks,
+        rawTranscript: this.subagents.find(s => s.id === sub.id)?.rawTranscript,
+      }));
+
+      // Persist immediately
+      this.persistenceAdapter.saveTranscript(this.sessionId, event.content, subagentId)
+        .then(() => logger.debug({ sessionId: this.sessionId, subagentId }, 'Persisted subagent transcript'))
+        .catch(error => logger.error({ error, sessionId: this.sessionId, subagentId }, 'Failed to persist subagent transcript'));
+
+      // Emit for WebSocket clients
+      this.eventBus.emit('session:subagent:changed', {
+        sessionId: this.sessionId,
+        subagentId,
+        content: event.content,
+      });
+    }
   }
 
   /**
@@ -285,7 +510,7 @@ export class AgentSession {
   async sendMessage(message: string): Promise<void> {
     // Emit 'starting' status immediately when sandbox doesn't exist
     // This provides feedback to clients before sandbox creation (which can take a while)
-    if (!this.sandbox) {
+    if (!this.sandboxPrimitive) {
       this.sandboxStatus = 'starting';
       this.emitRuntimeStatus("Preparing...");
     }
@@ -327,7 +552,7 @@ export class AgentSession {
         'Sending message to agent...'
       );
 
-      for await (const event of this.sandbox!.executeQuery(message)) {
+      for await (const event of this.adapter!.executeQuery({ query: message })) {
         switch (event.type) {
           case 'block_start':
             this.eventBus.emit('session:block:start', {
@@ -392,20 +617,37 @@ export class AgentSession {
   }
 
   private async syncSessionStateWithSandbox(): Promise<void> {
-    if (!this.sandbox) {
+    if (!this.sandboxPrimitive || !this.adapter) {
       // No sandbox, nothing to sync from
       return;
     }
 
-    // Read raw transcripts and workspace files from sandbox
-    const transcripts = await this.sandbox.readSessionTranscripts();
-    const workspaceFiles = await this.sandbox.readAllWorkspaceFiles();
+    // Read raw transcripts from sandbox
+    const transcripts = await this.adapter.readSessionTranscripts({});
+
+    // Read workspace files from sandbox
+    const basePaths = this.sandboxPrimitive.getBasePaths();
+    const workspaceFilePaths = await this.sandboxPrimitive.listFiles(basePaths.WORKSPACE_DIR);
+    const workspaceFiles = await Promise.all(workspaceFilePaths.map(async fullPath => {
+      // Store relative path (strip workspace dir prefix) for portability
+      let relativePath = fullPath;
+      if (fullPath.startsWith(basePaths.WORKSPACE_DIR)) {
+        relativePath = fullPath.slice(basePaths.WORKSPACE_DIR.length);
+        if (relativePath.startsWith('/')) {
+          relativePath = relativePath.slice(1);
+        }
+      }
+      return {
+        path: relativePath,
+        content: await this.sandboxPrimitive!.readFile(fullPath)
+      } as WorkspaceFile;
+    }));
 
     this.workspaceFiles = workspaceFiles;
     this.rawTranscript = transcripts.main ?? undefined;
 
-    // Parse blocks using sandbox adapter
-    const parsed = await this.sandbox.parseSessionTranscripts();
+    // Parse blocks using adapter
+    const parsed = this.adapter.parseTranscripts(transcripts.main ?? '', transcripts.subagents);
     this.blocks = parsed.blocks;
     this.subagents = parsed.subagents.map(sub => ({
       id: sub.id,
@@ -450,10 +692,11 @@ export class AgentSession {
       this.stopWatchersAndJobs();
 
       // Sync state if sandbox exists
-      if (this.sandbox) {
+      if (this.sandboxPrimitive) {
         await this.syncSessionStateToStorage();
-        await this.sandbox.terminate();
-        this.sandbox = undefined;
+        await this.sandboxPrimitive.terminate();
+        this.sandboxPrimitive = undefined;
+        this.adapter = undefined;
       }
 
       logger.info({ sessionId: this.sessionId }, 'Session destroyed');
@@ -523,80 +766,6 @@ export class AgentSession {
     };
   }
 
-  /**
-   * Set up listener for workspace file events from EventBus.
-   * AgentSandbox emits file events directly to EventBus, we just need to update internal state.
-   */
-  private setupWorkspaceFileListener(): void {
-    logger.info({ sessionId: this.sessionId }, 'Setting up workspace file listener');
-
-    this.eventBus.on('session:file:modified', async (data) => {
-      // Only handle events for this session
-      if (data.sessionId !== this.sessionId) return;
-
-      logger.debug({
-        sessionId: this.sessionId,
-        path: data.file.path,
-        contentLength: data.file.content?.length ?? 0
-      }, 'Received workspace file event from EventBus');
-
-      // Update internal state
-      const existingIndex = this.workspaceFiles.findIndex(f => f.path === data.file.path);
-      if (existingIndex >= 0) {
-        this.workspaceFiles[existingIndex] = data.file;
-      } else {
-        this.workspaceFiles.push(data.file);
-      }
-
-      // Persist immediately
-      try {
-        await this.persistenceAdapter.saveWorkspaceFile(this.sessionId, data.file);
-        logger.debug({ sessionId: this.sessionId, path: data.file.path }, 'Persisted workspace file');
-      } catch (error) {
-        logger.error({ error, sessionId: this.sessionId, path: data.file.path }, 'Failed to persist workspace file');
-      }
-    });
-  }
-
-  /**
-   * Set up listener for transcript change events from EventBus.
-   * AgentSandbox emits transcript events directly to EventBus, we parse and update internal state.
-   */
-  private setupTranscriptListener(): void {
-    logger.info({ sessionId: this.sessionId }, 'Setting up transcript listener');
-
-    this.eventBus.on('session:transcript:changed', async (data) => {
-      // Only handle events for this session
-      if (data.sessionId !== this.sessionId) return;
-
-      logger.debug({
-        sessionId: this.sessionId,
-        path: data.path,
-        contentLength: data.content.length
-      }, 'Received transcript change event from EventBus');
-
-      this.rawTranscript = data.content;
-
-      // Parse blocks via sandbox if available
-      if (this.sandbox) {
-        try {
-          const parsed = await this.sandbox.parseSessionTranscripts();
-          this.blocks = parsed.blocks;
-        } catch (error) {
-          logger.error({ error, sessionId: this.sessionId }, 'Failed to parse transcripts');
-        }
-      }
-
-      // Persist immediately
-      try {
-        await this.persistenceAdapter.saveTranscript(this.sessionId, data.content);
-        logger.debug({ sessionId: this.sessionId, path: data.path }, 'Persisted transcript');
-      } catch (error) {
-        logger.error({ error, sessionId: this.sessionId, path: data.path }, 'Failed to persist transcript');
-      }
-    });
-  }
-
   private startPeriodicSync(): void {
     this.syncInterval = setInterval(async () => {
       try {
@@ -616,9 +785,9 @@ export class AgentSession {
     logger.info({ sessionId: this.sessionId }, 'Starting sandbox health monitoring');
 
     this.sandboxHeartbeat = setInterval(async () => {
-      if (!this.sandbox) return;
+      if (!this.sandboxPrimitive) return;
 
-      const exitCode = await this.sandbox.heartbeat();
+      const exitCode = await this.sandboxPrimitive.poll();
       this.lastHealthCheck = Date.now();
 
       if (exitCode !== null) {

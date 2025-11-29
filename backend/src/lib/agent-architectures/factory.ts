@@ -3,6 +3,7 @@ import { GeminiCLIAdapter } from "./gemini-cli";
 import { OpenCodeAdapter } from "./opencode";
 import { AGENT_ARCHITECTURE_TYPE } from "../../types/session/index";
 import { SandboxPrimitive } from "../sandbox/base";
+import { ConversationBlock } from "../../types/session/blocks";
 
 export const getAgentArchitectureAdapter = (architecture : AGENT_ARCHITECTURE_TYPE, sandbox : SandboxPrimitive, sessionId : string) => {
     switch (architecture) {
@@ -15,14 +16,19 @@ export const getAgentArchitectureAdapter = (architecture : AGENT_ARCHITECTURE_TY
     }
 }
 
-
-export const getArchitectureParser = (architecture : AGENT_ARCHITECTURE_TYPE) => {
+/**
+ * Parse transcripts using the appropriate architecture's static parser
+ * This allows parsing without a sandbox instance (e.g., on session load)
+ */
+export const parseTranscripts = (
+    architecture: AGENT_ARCHITECTURE_TYPE,
+    rawTranscript: string,
+    subagents: { id: string; transcript: string }[]
+): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } => {
     switch (architecture) {
         case "claude-agent-sdk":
-            return ClaudeSDKAdapter.parseTranscripts;
+            return ClaudeSDKAdapter.parseTranscripts(rawTranscript, subagents);
         case "gemini-cli":
-            throw new Error("Gemini CLI is not supported yet");
-        case "opencode":
-            return OpenCodeAdapter.parseTranscripts;
+            throw new Error("Gemini CLI parsing is not supported yet");
     }
 }

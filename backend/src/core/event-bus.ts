@@ -135,6 +135,16 @@ export interface DomainEvents {
     status: 'completed' | 'failed';
   };
 
+  /**
+   * Subagent transcript changed
+   * Emitted by: AgentSession (transcript watcher)
+   */
+  'session:subagent:changed': {
+    sessionId: string;
+    subagentId: string;
+    content: string;
+  };
+
   // ============================================================================
   // File Events
   // ============================================================================

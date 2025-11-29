@@ -5,7 +5,7 @@
  * Join WebSocket rooms to receive real-time updates for the session.
  */
 
-import { useContext, useCallback, useState, useEffect } from 'react';
+import { useContext, useCallback, useState, useEffect, useMemo } from 'react';
 import { AgentServiceContext } from '../context/AgentServiceContext';
 import type {
   AGENT_ARCHITECTURE_TYPE,
@@ -86,16 +86,31 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
 
   const runtime = session?.info.runtime ?? null;
 
-  // Auto-load session on mount if sessionId provided
+  // Derive a stable boolean for whether the session is loaded
+  // This prevents the effect from re-running on every state change
+  const sessionLoaded = useMemo(
+    () => currentSessionId ? state.sessions.has(currentSessionId) : false,
+    [currentSessionId, state.sessions]
+  );
+
+  // Sync sessionId prop to currentSessionId state
+  // This ensures room join/leave happens when the prop changes
   useEffect(() => {
-    if (sessionId && !state.sessions.has(sessionId)) {
-      loadSessionById(sessionId);
-    }
+    setCurrentSessionId(sessionId);
   }, [sessionId]);
 
-  // Join/leave WebSocket room when session changes
+  // Auto-load session data if not already in state
   useEffect(() => {
-    if (currentSessionId) {
+    if (currentSessionId && !state.sessions.has(currentSessionId)) {
+      loadSessionById(currentSessionId);
+    }
+  }, [currentSessionId]);
+
+  // Join/leave WebSocket room when session changes
+  // Only join when session exists in state (not just when we have an ID)
+  // This prevents a race condition where events arrive before the session is loaded
+  useEffect(() => {
+    if (currentSessionId && sessionLoaded) {
       wsManager.joinSession(currentSessionId).catch((err) => {
         console.error('[useAgentSession] Failed to join session room:', err);
       });
@@ -106,7 +121,7 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
         });
       };
     }
-  }, [currentSessionId, wsManager]);
+  }, [currentSessionId, sessionLoaded, wsManager]);
 
   const loadSessionById = async (id: string) => {
     setIsLoading(true);
