@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAgentSession } from "@hhopkins/agent-runtime-react";
 import { SessionList } from "@/components/SessionList";
 import { SessionHeader } from "@/components/SessionHeader";
 import { AgentChat } from "@/components/AgentChat";
@@ -21,6 +22,11 @@ import { DebugEventList } from "@/components/DebugEventList";
 export default function HomePage() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"chat" | "files" | "subagents" | "raw">("chat");
+
+  // Use useAgentSession at the page level to ensure the WebSocket room is joined
+  // regardless of which tab is active. This is important because the room join
+  // logic lives in useAgentSession, not in useMessages.
+  useAgentSession(currentSessionId ?? undefined);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
