@@ -31,7 +31,7 @@ import type {
 import type { ConversationBlock } from '../types/session/blocks.js';
 import type { EventBus } from './event-bus.js';
 import type { SandboxPrimitive, WatchEvent } from '../lib/sandbox/base.js';
-import type { AgentArchitectureAdapter } from '../lib/agent-architectures/base.js';
+import type { AgentArchitectureAdapter, AgentArchitectureSessionOptions } from '../lib/agent-architectures/base.js';
 import { createSandbox } from '../lib/sandbox/factory.js';
 import { getAgentArchitectureAdapter, parseTranscripts } from '../lib/agent-architectures/factory.js';
 
@@ -65,6 +65,7 @@ export class AgentSession {
   private rawTranscript?: string;
   private subagents: { id: string; blocks: ConversationBlock[], rawTranscript?: string }[];
   private workspaceFiles: WorkspaceFile[];
+  private sessionOptions?: AgentArchitectureSessionOptions;
 
   // Agent Details
   private agentProfile: AgentProfile;
@@ -87,6 +88,7 @@ export class AgentSession {
       sessionId: string
     } | {
       agentProfileRef: string,
+      sessionOptions: AgentArchitectureSessionOptions,
       architecture: AGENT_ARCHITECTURE_TYPE
     },
     modalContext: ModalContext,
@@ -96,7 +98,7 @@ export class AgentSession {
   ): Promise<AgentSession> {
 
     let session: AgentSession;
-    let sessionInput: { newSessionId: string; architecture: AGENT_ARCHITECTURE_TYPE } | { savedSessionData: PersistedSessionData };
+    let sessionInput: { newSessionId: string; architecture: AGENT_ARCHITECTURE_TYPE, sessionOptions?: AgentArchitectureSessionOptions } | { savedSessionData: PersistedSessionData };
 
     if ('sessionId' in input) {
       // Load existing session from persistence
@@ -127,7 +129,7 @@ export class AgentSession {
         throw new Error(`Agent profile ${input.agentProfileRef} not found in persistence`);
       }
 
-      sessionInput = { newSessionId: uuid, architecture: input.architecture };
+      sessionInput = { newSessionId: uuid, architecture: input.architecture, sessionOptions: input.sessionOptions };
       session = new AgentSession({
         modalContext,
         eventBus,
@@ -151,7 +153,8 @@ export class AgentSession {
       agentProfile: AgentProfile,
       session: {
         newSessionId: string,
-        architecture: AGENT_ARCHITECTURE_TYPE
+        architecture: AGENT_ARCHITECTURE_TYPE, 
+        sessionOptions?: AgentArchitectureSessionOptions,
       } | {
         savedSessionData: PersistedSessionData,
       },
@@ -172,6 +175,7 @@ export class AgentSession {
       this.blocks = [];
       this.subagents = [];
       this.workspaceFiles = [];
+      this.sessionOptions = props.session.sessionOptions;
     } else {
       this.architecture = props.session.savedSessionData.type;
       this.sessionId = props.session.savedSessionData.sessionId;
@@ -179,6 +183,7 @@ export class AgentSession {
       this.rawTranscript = props.session.savedSessionData.rawTranscript;
       this.workspaceFiles = props.session.savedSessionData.workspaceFiles;
       this.blocks = []; // Will be parsed in initialize()
+      this.sessionOptions = props.session.savedSessionData.sessionOptions;
       this.subagents = props.session.savedSessionData.subagents?.map(subagent => ({
         id: subagent.id,
         blocks: [],
@@ -552,7 +557,7 @@ export class AgentSession {
         'Sending message to agent...'
       );
 
-      for await (const event of this.adapter!.executeQuery({ query: message })) {
+      for await (const event of this.adapter!.executeQuery({ query: message, options: this.sessionOptions })) {
         switch (event.type) {
           case 'block_start':
             this.eventBus.emit('session:block:start', {

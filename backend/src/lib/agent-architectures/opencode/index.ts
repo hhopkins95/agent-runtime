@@ -10,46 +10,21 @@
  */
 
 import { basename } from 'path';
-import { AgentArchitectureAdapter } from '../base.js';
+import { AgentArchitectureAdapter, AgentArchitectureStaticMethods } from '../base.js';
 import { AgentProfile } from '../../../types/agent-profiles.js';
 import { StreamEvent } from '../../../types/session/streamEvents.js';
 import { SandboxPrimitive } from '../../sandbox/base.js';
 import { ConversationBlock } from '../../../types/session/blocks.js';
 import { logger } from '../../../config/logger.js';
-import {
-  OpenCodeSessionTranscript,
-  OpenCodeMessage,
-  OpenCodeMessageWithParts,
-  OpenCodePart,
-  OpenCodeSession,
-  OpenCodeProject,
-  ID_PREFIX,
-} from './types.js';
 
-/**
- * Generate an OpenCode-style ID
- * Format: prefix_timeBytes_randomString (26 chars total)
- */
-function generateOpenCodeId(prefix: string): string {
-  const timestamp = Date.now();
-  const timeBytes = timestamp.toString(16).padStart(12, '0');
-  const random = Math.random().toString(36).substring(2, 13);
-  return `${prefix}_${timeBytes}_${random}`;
+
+
+export interface OpenCodeSessionOptions { 
+  model? : string,
 }
 
-/**
- * Get start time from a part, handling different time structures
- */
-function getPartStartTime(part: OpenCodePart): number {
-  if (!part.time) return 0;
-  // RetryPart has { created: number }, others have { start?: number }
-  if ('created' in part.time) {
-    return part.time.created;
-  }
-  return part.time.start || 0;
-}
 
-export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeMessage> {
+export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSessionOptions> {
   // Default project ID for sandbox workspace
   private readonly projectId: string;
 
@@ -452,46 +427,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeMessage
     throw new Error('OpenCode executeQuery not yet implemented. This is a stub implementation.');
   }
 
-  public static parseTranscripts(
-    rawTranscript: string,
-    subagents: { id: string; transcript: string }[]
-  ): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
-    if (!rawTranscript) {
-      return { blocks: [], subagents: [] };
-    }
-
-    const transcript: OpenCodeSessionTranscript = JSON.parse(rawTranscript);
-    const blocks: ConversationBlock[] = [];
-
-    for (const { message, parts } of transcript.messages) {
-      if (message.role === 'user') {
-        // Extract text from user message parts
-        const textParts = parts.filter((p) => p.type === 'text');
-        const content = textParts.map((p) => (p as any).text).join('\n');
-
-        blocks.push({
-          type: 'user_message',
-          id: message.id,
-          timestamp: new Date(message.time.created).toISOString(),
-          content,
-        });
-      } else if (message.role === 'assistant') {
-        // Process each part
-        for (const part of parts) {
-          const partBlocks = OpenCodeAdapter.convertPartToBlocks(part, message);
-          blocks.push(...partBlocks);
-        }
-      }
-    }
-
-    // OpenCode doesn't have separate subagent transcripts
-    return { blocks, subagents: [] };
-  }
-
-  public parseTranscripts(
-    rawTranscript: string,
-    subagents: { id: string; transcript: string }[]
-  ): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
+  public parseTranscripts(rawTranscript: string, subagents: { id: string; transcript: string }[]): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
     return OpenCodeAdapter.parseTranscripts(rawTranscript, subagents);
   }
 
@@ -652,4 +588,52 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeMessage
         return 'pending';
     }
   }
+
+
+
+  // Static methods
+  public static createSessionId(): string {
+    const timestamp = Date.now();
+    const timeBytes = timestamp.toString(16).padStart(12, '0');
+    const random = Math.random().toString(36).substring(2, 13);
+    return `ses_${timeBytes}_${random}`;
+  }
+
+ public static parseTranscripts(
+    rawTranscript: string,
+    subagents: { id: string; transcript: string }[]
+  ): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
+    if (!rawTranscript) {
+      return { blocks: [], subagents: [] };
+    }
+
+    const transcript: OpenCodeSessionTranscript = JSON.parse(rawTranscript);
+    const blocks: ConversationBlock[] = [];
+
+    for (const { message, parts } of transcript.messages) {
+      if (message.role === 'user') {
+        // Extract text from user message parts
+        const textParts = parts.filter((p) => p.type === 'text');
+        const content = textParts.map((p) => (p as any).text).join('\n');
+
+        blocks.push({
+          type: 'user_message',
+          id: message.id,
+          timestamp: new Date(message.time.created).toISOString(),
+          content,
+        });
+      } else if (message.role === 'assistant') {
+        // Process each part
+        for (const part of parts) {
+          const partBlocks = OpenCodeAdapter.convertPartToBlocks(part, message);
+          blocks.push(...partBlocks);
+        }
+      }
+    }
+
+    // OpenCode doesn't have separate subagent transcripts
+    return { blocks, subagents: [] };
+  }
+
+
 }

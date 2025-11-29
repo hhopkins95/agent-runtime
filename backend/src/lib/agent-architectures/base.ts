@@ -10,7 +10,7 @@ import { StreamEvent } from "../../types/session/streamEvents";
  * 
  * - NativeStreamEventType : The type of the native stream event emitted by the agent architecture. ie 'SDKMessage' 
  */
-export interface AgentArchitectureAdapter<NativeStreamEventType = any> { 
+export interface AgentArchitectureAdapter<ArchitectureSessionOptions extends Record<string, any> = {}>{ 
 
     getPaths : () => {
         AGENT_STORAGE_DIR : string, 
@@ -27,19 +27,36 @@ export interface AgentArchitectureAdapter<NativeStreamEventType = any> {
 
     readSessionTranscripts : (args : {}) => Promise<{main : string | null, subagents : {id : string, transcript : string}[]}>,
 
-    executeQuery : (args : {query : string}) => AsyncGenerator<StreamEvent>,
+    executeQuery : (args : {query : string, options? : ArchitectureSessionOptions}) => AsyncGenerator<StreamEvent>,
 
-    /**
-     * Parses the raw transcript strings into a list of conversation blocks.
-     * 
-     * The transcripts are an array of both the main agent and subagent transcripts.
-     * 
-     * The adapter is responsible for determining which is which.
-     * 
-     * @param rawTranscripts  - Stringified raw transcript blob from the agent application. Either the jsonl file for claude-agent-sdk or the json file for gemini-cli.
-     * @returns 
-     */
-     parseTranscripts : (rawTranscript : string, subagents : {id : string, transcript : string}[]) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}, 
-
+    parseTranscripts : (rawTranscript : string, subagents : {id : string, transcript : string}[]) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}
 
 }
+
+
+export interface AgentArchitectureStaticMethods {
+    /**
+     * Parse raw transcript / session json into our conversation blocks
+     * 
+     * @param rawTranscript 
+     * @param subagents 
+     * @returns 
+     */
+    parseTranscripts : (rawTranscript : string, subagents : {id : string, transcript : string}[]) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}
+
+
+    /**
+     * Create a new session id with the proper formatting for this architecture
+     * 
+     * @returns A new session id
+     */
+    createSessionId : () => string
+}
+
+
+
+// export the actual session options 
+import { ClaudeSDKSessionOptions } from "./claude-sdk/index";
+import { OpenCodeSessionOptions } from "./opencode/index";
+export type AgentArchitectureSessionOptions = ClaudeSDKSessionOptions | OpenCodeSessionOptions;
+export type { ClaudeSDKSessionOptions, OpenCodeSessionOptions };

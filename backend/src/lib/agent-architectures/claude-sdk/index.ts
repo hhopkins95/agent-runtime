@@ -9,13 +9,21 @@ import { parseClaudeTranscriptFile } from "./claude-transcript-parser.js";
 import { sdkMessageToBlocks, extractToolResultBlocks, parseStreamEvent, convertMessagesToBlocks } from "./block-converter.js";
 import { logger } from "../../../config/logger.js";
 import { streamJSONL } from "../../helpers/stream.js";
+import { randomUUID } from "crypto";
 
 
 
-export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
-    // private needsSessionCreation : boolean 
+export interface ClaudeSDKSessionOptions { 
+    model? : string,
+    foo : string
+}
 
 
+
+export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessionOptions> {
+
+    public static createSessionId(): string { return randomUUID() }
+    
     public constructor(
         private readonly sandbox: SandboxPrimitive,
         private readonly sessionId: string
@@ -252,7 +260,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<SDKMessage> {
         }
     }
 
-    public async* executeQuery(args: {query: string}): AsyncGenerator<StreamEvent> {
+    public async* executeQuery(args: {query: string, options? : ClaudeSDKSessionOptions}): AsyncGenerator<StreamEvent> {
         try {
             let time = Date.now();
 

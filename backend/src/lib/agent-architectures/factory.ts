@@ -30,5 +30,18 @@ export const parseTranscripts = (
             return ClaudeSDKAdapter.parseTranscripts(rawTranscript, subagents);
         case "gemini-cli":
             throw new Error("Gemini CLI parsing is not supported yet");
+        case "opencode":
+            return OpenCodeAdapter.parseTranscripts(rawTranscript, subagents);
+    }
+}
+
+export const createSessionId = (architecture: AGENT_ARCHITECTURE_TYPE) => {
+    switch (architecture) {
+        case "claude-agent-sdk":
+            return ClaudeSDKAdapter.createSessionId();
+        case "gemini-cli":
+            throw new Error("Gemini CLI session id creation is not supported yet");
+        case "opencode":
+            return OpenCodeAdapter.createSessionId();
     }
 }

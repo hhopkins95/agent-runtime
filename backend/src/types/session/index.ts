@@ -1,3 +1,4 @@
+import { AgentArchitectureSessionOptions } from "../../lib/agent-architectures/base";
 import type { ConversationBlock } from "./blocks";
 
 export type AGENT_ARCHITECTURE_TYPE = "claude-agent-sdk" | "gemini-cli" | "opencode"
@@ -25,6 +26,12 @@ export interface PersistedSessionListData {
      */
     sessionId: string,
     type: AGENT_ARCHITECTURE_TYPE,
+    /**
+     * Runtime / execution options (like model selection, etc...)
+     * 
+     * Depends on the architecture type
+     */
+    sessionOptions? : AgentArchitectureSessionOptions,
     agentProfileReference: string, // The id / name of the agent profile this session is using
     name?: string,
     lastActivity?: number,
@@ -38,6 +45,7 @@ export interface PersistedSessionListData {
  * Does NOT include parsed blocks - those are computed at runtime.
  */
 export interface PersistedSessionData extends PersistedSessionListData {
+
     /**
      * Stringified raw transcript blob from the agent application. Either the jsonl file for claude-agent-sdk or the json file for gemini-cli.
      */
