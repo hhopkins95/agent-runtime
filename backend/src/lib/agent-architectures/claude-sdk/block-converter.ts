@@ -6,16 +6,14 @@
  */
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { logger } from '../../../config/logger.js';
 import type {
   ConversationBlock,
-  UserMessageBlock,
-  ToolUseBlock,
-  ToolResultBlock,
   SubagentBlock,
+  ToolResultBlock,
+  ToolUseBlock
 } from '../../../types/session/blocks.js';
-import { logger } from '../../../config/logger.js';
 import { StreamEvent } from '../../../types/session/streamEvents.js';
-import { matchesGlob } from 'path/win32';
 
 
 

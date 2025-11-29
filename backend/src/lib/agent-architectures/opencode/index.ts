@@ -16,6 +16,7 @@ import { StreamEvent } from '../../../types/session/streamEvents.js';
 import { SandboxPrimitive } from '../../sandbox/base.js';
 import { ConversationBlock } from '../../../types/session/blocks.js';
 import { logger } from '../../../config/logger.js';
+import { randomUUID } from 'crypto';
 
 
 
@@ -25,16 +26,11 @@ export interface OpenCodeSessionOptions {
 
 
 export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSessionOptions> {
-  // Default project ID for sandbox workspace
-  private readonly projectId: string;
 
   public constructor(
     private readonly sandbox: SandboxPrimitive,
     private readonly sessionId: string
-  ) {
-    // Use a consistent project ID for the workspace
-    this.projectId = generateOpenCodeId(ID_PREFIX.project);
-  }
+  ) {}
 
   public getPaths(): {
     AGENT_STORAGE_DIR: string;
@@ -212,110 +208,15 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     mainTranscript: string;
     subagents: { id: string; transcript: string }[];
   }): Promise<void> {
-    const paths = this.getPaths();
-    const storagePath = `${paths.AGENT_STORAGE_DIR}/storage`;
 
-    // Ensure storage directories exist
-    await this.sandbox.exec(['mkdir', '-p', `${storagePath}/project`]);
-    await this.sandbox.exec(['mkdir', '-p', `${storagePath}/session/${this.projectId}`]);
-    await this.sandbox.exec(['mkdir', '-p', `${storagePath}/message`]);
-    await this.sandbox.exec(['mkdir', '-p', `${storagePath}/part`]);
+    const randomId = randomUUID()
+    const filePath = `/tmp/${randomId}.json`
 
-    // If no transcript to restore, just create empty project
-    if (!args.mainTranscript) {
-      // Create project file
-      const project: OpenCodeProject = {
-        id: this.projectId,
-        worktree: paths.WORKSPACE_DIR,
-        time: {
-          created: Date.now(),
-        },
-      };
+    // write the transcript to a random tmp file 
+    await this.sandbox.writeFile(filePath, args.mainTranscript);
 
-      await this.sandbox.writeFile(
-        `${storagePath}/project/${this.projectId}.json`,
-        JSON.stringify(project, null, 2)
-      );
-      return;
-    }
-
-    // Parse our intermediate format
-    const transcript: OpenCodeSessionTranscript = JSON.parse(args.mainTranscript);
-
-    const filesToWrite: { path: string; content: string }[] = [];
-
-    // 1. Write project file
-    const project: OpenCodeProject = {
-      id: this.projectId,
-      worktree: paths.WORKSPACE_DIR,
-      time: {
-        created: Date.parse(transcript.metadata.createdAt),
-      },
-    };
-    filesToWrite.push({
-      path: `${storagePath}/project/${this.projectId}.json`,
-      content: JSON.stringify(project, null, 2),
-    });
-
-    // 2. Write session file
-    const session: OpenCodeSession = {
-      ...transcript.session,
-      id: this.sessionId,
-      projectID: this.projectId,
-      directory: paths.WORKSPACE_DIR,
-    };
-    filesToWrite.push({
-      path: `${storagePath}/session/${this.projectId}/${this.sessionId}.json`,
-      content: JSON.stringify(session, null, 2),
-    });
-
-    // 3. Write message and part files
-    for (const msgWithParts of transcript.messages) {
-      const message = {
-        ...msgWithParts.message,
-        sessionID: this.sessionId,
-      };
-
-      // Create message directory
-      await this.sandbox.exec(['mkdir', '-p', `${storagePath}/message/${this.sessionId}`]);
-
-      filesToWrite.push({
-        path: `${storagePath}/message/${this.sessionId}/${message.id}.json`,
-        content: JSON.stringify(message, null, 2),
-      });
-
-      // Write parts
-      if (msgWithParts.parts.length > 0) {
-        await this.sandbox.exec(['mkdir', '-p', `${storagePath}/part/${message.id}`]);
-
-        for (const part of msgWithParts.parts) {
-          const partWithRefs = {
-            ...part,
-            sessionID: this.sessionId,
-            messageID: message.id,
-          };
-          filesToWrite.push({
-            path: `${storagePath}/part/${message.id}/${part.id}.json`,
-            content: JSON.stringify(partWithRefs, null, 2),
-          });
-        }
-      }
-    }
-
-    // Write all files in batch
-    if (filesToWrite.length > 0) {
-      logger.debug({ fileCount: filesToWrite.length }, 'Writing OpenCode session files');
-      const result = await this.sandbox.writeFiles(filesToWrite);
-
-      if (result.failed.length > 0) {
-        logger.warn(
-          { failed: result.failed, succeeded: result.success.length },
-          'Some OpenCode session files failed to write'
-        );
-      }
-    }
-
-    logger.info({ sessionId: this.sessionId }, 'OpenCode session transcripts restored');
+    // import the transcript into opencode
+    await this.sandbox.exec(['opencode', 'session', 'import', filePath]);
   }
 
   public async readSessionTranscripts(_args: {}): Promise<{
