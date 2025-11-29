@@ -183,15 +183,15 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeMessage
       // Build MCP server configuration if present
       // OpenCode uses a slightly different MCP config format than Claude SDK
       let mcpConfig: Record<string, unknown> | undefined;
-      if (profile.mcp && profile.mcp.length > 0) {
-        mcpConfig = {
-          stdio: profile.mcp.map((server) => ({
-            command: server.command,
-            args: server.args || [],
-            ...(server.env && { env: server.env }),
-          })),
-        };
-      }
+      // if (profile.mcp && profile.mcp.length > 0) {
+      //   mcpConfig = {
+      //     stdio: profile.mcp.map((server) => ({
+      //       command: server.command,
+      //       args: server.args || [],
+      //       ...(server.env && { env: server.env }),
+      //     })),
+      //   };
+      // }
 
       filesToWrite.push({
         path: `${paths.AGENT_PROFILE_DIR}/opencode.json`,
