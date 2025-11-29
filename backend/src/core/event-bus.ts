@@ -187,13 +187,12 @@ export interface DomainEvents {
   };
 
   /**
-   * Transcript file changed (internal event for session state updates)
-   * Emitted by: AgentSandbox (transcript watcher)
+   * Transcript changed (internal event for session state updates)
+   * Emitted by: AgentSession (via adapter transcript watcher)
    */
   'session:transcript:changed': {
     sessionId: string;
     content: string;
-    path: string;
   };
 
   // ============================================================================

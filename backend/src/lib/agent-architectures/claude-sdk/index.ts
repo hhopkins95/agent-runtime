@@ -1,6 +1,6 @@
 import { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { basename } from "path";
-import { AgentArchitectureAdapter } from "../base.js";
+import { AgentArchitectureAdapter, WorkspaceFileEvent, TranscriptChangeEvent } from "../base.js";
 import { AgentProfile } from "../../../types/agent-profiles.js";
 import { StreamEvent } from "../../../types/session/streamEvents.js";
 import { SandboxPrimitive } from "../../sandbox/base.js";
@@ -365,5 +365,46 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         return ClaudeSDKAdapter.parseTranscripts(rawTranscript, subagents);
     }
 
-   
+    public async watchWorkspaceFiles(callback: (event: WorkspaceFileEvent) => void): Promise<void> {
+        const paths = this.getPaths();
+
+        await this.sandbox.watch(paths.WORKSPACE_DIR, (event) => {
+            callback({
+                type: event.type,
+                path: event.path,
+                content: event.content,
+            });
+        });
+    }
+
+    public async watchSessionTranscriptChanges(callback: (event: TranscriptChangeEvent) => void): Promise<void> {
+        const paths = this.getPaths();
+
+        await this.sandbox.watch(paths.AGENT_STORAGE_DIR, (event) => {
+            // Only process file additions and changes (not unlinks)
+            if (event.type === 'unlink' || !event.content) {
+                return;
+            }
+
+            const fileName = basename(event.path);
+            const identification = this.identifySessionTranscriptFile({ fileName, content: event.content });
+
+            if (!identification) {
+                return;
+            }
+
+            if ('isMain' in identification) {
+                callback({ type: 'main', content: event.content });
+            } else {
+                // Filter out placeholder subagent files
+                const lines = event.content.trim().split('\n').filter(l => l.trim().length > 0);
+                if (lines.length <= 1) {
+                    logger.debug({ subagentId: identification.subagentId, lines: lines.length }, 'Skipping placeholder subagent transcript');
+                    return;
+                }
+
+                callback({ type: 'subagent', subagentId: identification.subagentId, content: event.content });
+            }
+        });
+    }
 }

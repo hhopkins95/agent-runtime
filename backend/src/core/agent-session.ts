@@ -14,7 +14,6 @@
  */
 
 import { randomUUID } from 'crypto';
-import { basename } from 'path';
 import { logger } from '../config/logger.js';
 import type { ModalContext } from '../lib/sandbox/modal/client.js';
 import type { PersistenceAdapter } from '../types/persistence-adapter.js';
@@ -30,8 +29,8 @@ import type {
 } from '../types/session/index.js';
 import type { ConversationBlock } from '../types/session/blocks.js';
 import type { EventBus } from './event-bus.js';
-import type { SandboxPrimitive, WatchEvent } from '../lib/sandbox/base.js';
-import type { AgentArchitectureAdapter, AgentArchitectureSessionOptions } from '../lib/agent-architectures/base.js';
+import type { SandboxPrimitive } from '../lib/sandbox/base.js';
+import type { AgentArchitectureAdapter, AgentArchitectureSessionOptions, WorkspaceFileEvent, TranscriptChangeEvent } from '../lib/agent-architectures/base.js';
 import { createSandbox } from '../lib/sandbox/factory.js';
 import { createSessionId, getAgentArchitectureAdapter, parseTranscripts } from '../lib/agent-architectures/factory.js';
 
@@ -326,26 +325,19 @@ export class AgentSession {
    * Start file watchers for workspace and transcript directories
    */
   private async startWatchers(): Promise<void> {
-    if (!this.sandboxPrimitive || !this.adapter) {
-      throw new Error('Cannot start watchers without sandbox and adapter');
+    if (!this.adapter) {
+      throw new Error('Cannot start watchers without adapter');
     }
 
-    const basePaths = this.sandboxPrimitive.getBasePaths();
-    const adapterPaths = this.adapter.getPaths();
+    logger.info({ sessionId: this.sessionId }, 'Starting file watchers...');
 
-    logger.info({
-      sessionId: this.sessionId,
-      workspacePath: basePaths.WORKSPACE_DIR,
-      transcriptPath: adapterPaths.AGENT_STORAGE_DIR,
-    }, 'Starting file watchers...');
-
-    // Start both watchers and wait for them to be ready
+    // Start both watchers using adapter methods and wait for them to be ready
     await Promise.all([
-      this.sandboxPrimitive.watch(basePaths.WORKSPACE_DIR, (event) => {
+      this.adapter.watchWorkspaceFiles((event) => {
         this.handleWorkspaceFileChange(event);
       }),
-      this.sandboxPrimitive.watch(adapterPaths.AGENT_STORAGE_DIR, (event) => {
-        this.handleTranscriptFileChange(event);
+      this.adapter.watchSessionTranscriptChanges((event) => {
+        this.handleTranscriptChange(event);
       }),
     ]);
 
@@ -353,9 +345,9 @@ export class AgentSession {
   }
 
   /**
-   * Handle workspace file change events directly
+   * Handle workspace file change events from adapter
    */
-  private handleWorkspaceFileChange(event: WatchEvent): void {
+  private handleWorkspaceFileChange(event: WorkspaceFileEvent): void {
     // Skip files with no content (unlink events or binary/large files)
     if (event.content === undefined) {
       logger.debug({ sessionId: this.sessionId, path: event.path, type: event.type }, 'Skipping file with no content');
@@ -392,34 +384,18 @@ export class AgentSession {
   }
 
   /**
-   * Handle transcript file change events directly
+   * Handle transcript change events from adapter (already interpreted as main or subagent)
    */
-  private handleTranscriptFileChange(event: WatchEvent): void {
-    // Skip files with no content
-    if (event.content === undefined) {
-      logger.debug({ sessionId: this.sessionId, path: event.path, type: event.type }, 'Skipping transcript with no content');
-      return;
-    }
-
+  private handleTranscriptChange(event: TranscriptChangeEvent): void {
     if (!this.adapter) return;
 
-    const fileName = basename(event.path);
-    const identification = this.adapter.identifySessionTranscriptFile({ fileName, content: event.content });
+    if (event.type === 'main') {
+      logger.debug({
+        sessionId: this.sessionId,
+        type: 'main',
+        contentLength: event.content.length,
+      }, 'Main transcript changed');
 
-    if (!identification) {
-      logger.debug({ sessionId: this.sessionId, path: event.path }, 'Skipping non-transcript file');
-      return;
-    }
-
-    logger.debug({
-      sessionId: this.sessionId,
-      path: event.path,
-      type: event.type,
-      contentLength: event.content.length,
-      isMain: 'isMain' in identification,
-    }, 'Transcript file changed');
-
-    if ('isMain' in identification) {
       // Main transcript changed
       this.rawTranscript = event.content;
 
@@ -439,35 +415,34 @@ export class AgentSession {
 
       // Persist immediately
       this.persistenceAdapter.saveTranscript(this.sessionId, event.content)
-        .then(() => logger.debug({ sessionId: this.sessionId, path: event.path }, 'Persisted main transcript'))
-        .catch(error => logger.error({ error, sessionId: this.sessionId, path: event.path }, 'Failed to persist main transcript'));
+        .then(() => logger.debug({ sessionId: this.sessionId }, 'Persisted main transcript'))
+        .catch(error => logger.error({ error, sessionId: this.sessionId }, 'Failed to persist main transcript'));
 
       // Emit for WebSocket clients
       this.eventBus.emit('session:transcript:changed', {
         sessionId: this.sessionId,
         content: event.content,
-        path: event.path,
       });
     } else {
       // Subagent transcript changed
-      const { subagentId } = identification;
+      const { subagentId, content } = event;
 
-      // Check if it's a placeholder (skip if ≤1 line)
-      const lines = event.content.trim().split('\n').filter(l => l.trim().length > 0);
-      if (lines.length <= 1) {
-        logger.debug({ sessionId: this.sessionId, subagentId, lines: lines.length }, 'Skipping placeholder subagent transcript');
-        return;
-      }
+      logger.debug({
+        sessionId: this.sessionId,
+        type: 'subagent',
+        subagentId,
+        contentLength: content.length,
+      }, 'Subagent transcript changed');
 
       // Update subagent rawTranscript
       const existingSubagent = this.subagents.find(s => s.id === subagentId);
       if (existingSubagent) {
-        existingSubagent.rawTranscript = event.content;
+        existingSubagent.rawTranscript = content;
       } else {
         this.subagents.push({
           id: subagentId,
           blocks: [],
-          rawTranscript: event.content,
+          rawTranscript: content,
         });
       }
 
@@ -484,7 +459,7 @@ export class AgentSession {
       }));
 
       // Persist immediately
-      this.persistenceAdapter.saveTranscript(this.sessionId, event.content, subagentId)
+      this.persistenceAdapter.saveTranscript(this.sessionId, content, subagentId)
         .then(() => logger.debug({ sessionId: this.sessionId, subagentId }, 'Persisted subagent transcript'))
         .catch(error => logger.error({ error, sessionId: this.sessionId, subagentId }, 'Failed to persist subagent transcript'));
 
@@ -492,7 +467,7 @@ export class AgentSession {
       this.eventBus.emit('session:subagent:changed', {
         sessionId: this.sessionId,
         subagentId,
-        content: event.content,
+        content,
       });
     }
   }

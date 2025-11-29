@@ -4,6 +4,22 @@ import { ConversationBlock } from "../../types/session/blocks";
 import { StreamEvent } from "../../types/session/streamEvents";
 
 /**
+ * Event emitted when a workspace file changes
+ */
+export interface WorkspaceFileEvent {
+    type: 'add' | 'change' | 'unlink';
+    path: string;
+    content?: string;
+}
+
+/**
+ * Event emitted when a transcript changes
+ */
+export type TranscriptChangeEvent =
+    | { type: 'main'; content: string }
+    | { type: 'subagent'; subagentId: string; content: string };
+
+/**
  * Base interface that defines how a particular agent architecture manages session files / transformations
  * 
  * Generic Types : 
@@ -30,6 +46,10 @@ export interface AgentArchitectureAdapter<ArchitectureSessionOptions extends Rec
     executeQuery : (args : {query : string, options? : ArchitectureSessionOptions}) => AsyncGenerator<StreamEvent>,
 
     parseTranscripts : (rawTranscript : string, subagents : {id : string, transcript : string}[]) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}
+
+    watchWorkspaceFiles: (callback: (event: WorkspaceFileEvent) => void) => Promise<void>;
+
+    watchSessionTranscriptChanges: (callback: (event: TranscriptChangeEvent) => void) => Promise<void>;
 
 }
 

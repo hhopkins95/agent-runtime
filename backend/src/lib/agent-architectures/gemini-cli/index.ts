@@ -1,5 +1,5 @@
 import { MessageRecord as GeminiMessageRecord } from "@google/gemini-cli-core";
-import { AgentArchitectureAdapter } from "../base";
+import { AgentArchitectureAdapter, WorkspaceFileEvent, TranscriptChangeEvent } from "../base";
 import { SandboxPrimitive } from "../../sandbox/base";
 import { AgentProfile } from "../../../types/agent-profiles";
 import { ConversationBlock } from "../../../types/session/blocks";
@@ -45,6 +45,14 @@ export class GeminiCLIAdapter implements AgentArchitectureAdapter<GeminiMessageR
     }
 
     public readSessionTranscripts(args: {}): Promise<{main: string, subagents: {id: string, transcript: string}[]}> {
+        throw new Error("Not implemented");
+    }
+
+    public async watchWorkspaceFiles(callback: (event: WorkspaceFileEvent) => void): Promise<void> {
+        throw new Error("Not implemented");
+    }
+
+    public async watchSessionTranscriptChanges(callback: (event: TranscriptChangeEvent) => void): Promise<void> {
         throw new Error("Not implemented");
     }
 

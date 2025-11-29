@@ -10,7 +10,7 @@
  */
 
 import { basename } from 'path';
-import { AgentArchitectureAdapter, AgentArchitectureStaticMethods } from '../base.js';
+import { AgentArchitectureAdapter, AgentArchitectureStaticMethods, WorkspaceFileEvent, TranscriptChangeEvent } from '../base.js';
 import { AgentProfile } from '../../../types/agent-profiles.js';
 import { StreamEvent } from '../../../types/session/streamEvents.js';
 import { SandboxPrimitive } from '../../sandbox/base.js';
@@ -635,5 +635,45 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     return { blocks, subagents: [] };
   }
 
+  public async watchWorkspaceFiles(callback: (event: WorkspaceFileEvent) => void): Promise<void> {
+    const paths = this.getPaths();
 
+    await this.sandbox.watch(paths.WORKSPACE_DIR, (event) => {
+      callback({
+        type: event.type,
+        path: event.path,
+        content: event.content,
+      });
+    });
+  }
+
+  public async watchSessionTranscriptChanges(callback: (event: TranscriptChangeEvent) => void): Promise<void> {
+    const paths = this.getPaths();
+    const storagePath = `${paths.AGENT_STORAGE_DIR}/storage`;
+
+    await this.sandbox.watch(storagePath, async (event) => {
+      // Only process file additions and changes (not unlinks)
+      if (event.type === 'unlink' || !event.content) {
+        return;
+      }
+
+      const fileName = basename(event.path);
+      const identification = this.identifySessionTranscriptFile({ fileName, content: event.content });
+
+      if (!identification) {
+        return;
+      }
+
+      // OpenCode doesn't have separate subagent transcripts - all changes are main
+      // We need to re-read the full session to get the complete transcript
+      try {
+        const { main } = await this.readSessionTranscripts({});
+        if (main) {
+          callback({ type: 'main', content: main });
+        }
+      } catch (error) {
+        logger.error({ error, path: event.path }, 'Error reading session transcripts on file change');
+      }
+    });
+  }
 }
