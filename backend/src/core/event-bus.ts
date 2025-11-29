@@ -12,197 +12,59 @@
  */
 
 import { EventEmitter } from 'events';
-import type { WorkspaceFile, SessionRuntimeState } from '../types/session/index.js';
-import type { ConversationBlock } from '../types/session/blocks.js';
-import { AgentArchitectureSessionOptions } from '../lib/agent-architectures/base.js';
+import type { ServerToClientEvents } from '../types/events.js';
+
+/**
+ * Extract payload type from WebSocket event function signature
+ * e.g., (data: { sessionId: string }) => void  →  { sessionId: string }
+ */
+type EventPayload<T> = T extends (data: infer P) => void ? P : never;
 
 /**
  * Domain events emitted by business logic
  *
- * ALL events must be defined here for type safety.
- * Add new events as needed following the naming convention:
- * - resource:scope:action (e.g., session:file:created)
+ * Events shared with WebSocket clients are derived from ServerToClientEvents.
+ * Internal-only events are defined directly here.
  */
 export interface DomainEvents {
   // ============================================================================
-  // Session Lifecycle Events
+  // Events derived from ServerToClientEvents (single source of truth)
   // ============================================================================
 
-  /**
-   * Session runtime status changed (unified event for all status updates)
-   * Replaces: session:created, session:loaded, session:destroyed, sandbox:status
-   * Emitted by: AgentSession, SessionManager
-   */
-  'session:status': {
-    sessionId: string;
-    runtime: SessionRuntimeState;
-  };
+  'session:status': EventPayload<ServerToClientEvents['session:status']>;
+  'session:block:start': EventPayload<ServerToClientEvents['session:block:start']>;
+  'session:block:delta': EventPayload<ServerToClientEvents['session:block:delta']>;
+  'session:block:update': EventPayload<ServerToClientEvents['session:block:update']>;
+  'session:block:complete': EventPayload<ServerToClientEvents['session:block:complete']>;
+  'session:metadata:update': EventPayload<ServerToClientEvents['session:metadata:update']>;
+  'session:options:update': EventPayload<ServerToClientEvents['session:options:update']>;
+  'session:subagent:discovered': EventPayload<ServerToClientEvents['session:subagent:discovered']>;
+  'session:subagent:completed': EventPayload<ServerToClientEvents['session:subagent:completed']>;
+  'session:file:created': EventPayload<ServerToClientEvents['session:file:created']>;
+  'session:file:modified': EventPayload<ServerToClientEvents['session:file:modified']>;
+  'session:file:deleted': EventPayload<ServerToClientEvents['session:file:deleted']>;
 
-  /**
-   * Sessions list changed (trigger broadcast)
-   * Emitted by: SessionManager after create/load/unload
-   */
+  // ============================================================================
+  // Internal-only events (not exposed via WebSocket)
+  // ============================================================================
+
+  /** Sessions list changed - triggers broadcast of sessions:list */
   'sessions:changed': void;
 
-  // ============================================================================
-  // Block Streaming Events
-  // ============================================================================
-
-  /**
-   * New block started in conversation
-   * Emitted by: AgentSession.sendMessage()
-   */
-  'session:block:start': {
+  /** Transcript changed (for session state sync) */
+  'session:transcript:changed': {
     sessionId: string;
-    conversationId: 'main' | string; // 'main' or subagentId
-    block: ConversationBlock;
+    content: string;
   };
 
-  /**
-   * Text delta for streaming block content
-   * Emitted by: AgentSession.sendMessage()
-   */
-  'session:block:delta': {
-    sessionId: string;
-    conversationId: 'main' | string;
-    blockId: string;
-    delta: string;
-  };
-
-  /**
-   * Block metadata/status updated
-   * Emitted by: AgentSession.sendMessage()
-   */
-  'session:block:update': {
-    sessionId: string;
-    conversationId: 'main' | string;
-    blockId: string;
-    updates: Partial<ConversationBlock>;
-  };
-
-  /**
-   * Block completed and finalized
-   * Emitted by: AgentSession.sendMessage()
-   */
-  'session:block:complete': {
-    sessionId: string;
-    conversationId: 'main' | string;
-    blockId: string;
-    block: ConversationBlock;
-  };
-
-  /**
-   * Session metadata updated (tokens, cost, etc.)
-   * Emitted by: AgentSession.sendMessage()
-   */
-  'session:metadata:update': {
-    sessionId: string;
-    conversationId: 'main' | string;
-    metadata: {
-      usage?: {
-        inputTokens: number;
-        outputTokens: number;
-        cacheReadTokens?: number;
-        cacheWriteTokens?: number;
-        thinkingTokens?: number;
-        totalTokens: number;
-      };
-      costUSD?: number;
-      model?: string;
-      [key: string]: unknown;
-    };
-  };
-
-  /**
-   * Session options updated
-   * Emitted by: AgentSession.updateSessionOptions()
-   */
-  'session:options:update': {
-    sessionId: string;
-    options: AgentArchitectureSessionOptions;
-  };
-
-  // ============================================================================
-  // Subagent Events
-  // ============================================================================
-
-  /**
-   * New subagent discovered
-   * Emitted by: AgentSession (file watcher)
-   */
-  'session:subagent:discovered': {
-    sessionId: string;
-    subagent: { id: string; blocks: ConversationBlock[] };
-  };
-
-  /**
-   * Subagent task completed
-   * Emitted by: AgentSession (file watcher)
-   */
-  'session:subagent:completed': {
-    sessionId: string;
-    subagentId: string;
-    status: 'completed' | 'failed';
-  };
-
-  /**
-   * Subagent transcript changed
-   * Emitted by: AgentSession (transcript watcher)
-   */
+  /** Subagent transcript changed */
   'session:subagent:changed': {
     sessionId: string;
     subagentId: string;
     content: string;
   };
 
-  // ============================================================================
-  // File Events
-  // ============================================================================
-
-  /**
-   * File created in workspace
-   * Emitted by: AgentSession (file watcher)
-   */
-  'session:file:created': {
-    sessionId: string;
-    file: WorkspaceFile;
-  };
-
-  /**
-   * File modified in workspace
-   * Emitted by: AgentSession (file watcher)
-   */
-  'session:file:modified': {
-    sessionId: string;
-    file: WorkspaceFile;
-  };
-
-  /**
-   * File deleted from workspace
-   * Emitted by: AgentSession (file watcher)
-   */
-  'session:file:deleted': {
-    sessionId: string;
-    path: string;
-  };
-
-  /**
-   * Transcript changed (internal event for session state updates)
-   * Emitted by: AgentSession (via adapter transcript watcher)
-   */
-  'session:transcript:changed': {
-    sessionId: string;
-    content: string;
-  };
-
-  // ============================================================================
-  // Error Events
-  // ============================================================================
-
-  /**
-   * Error occurred during session operation
-   * Emitted by: AgentSession.sendMessage()
-   */
+  /** Session error - transformed to 'error' event for WebSocket */
   'session:error': {
     sessionId: string;
     error: {

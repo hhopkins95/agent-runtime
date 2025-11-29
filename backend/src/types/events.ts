@@ -101,7 +101,7 @@ export interface ServerToClientEvents {
   /**
    * Session options updated
    */
-  'session.options:update': (data: {
+  'session:options:update': (data: {
     sessionId: string;
     options: AgentArchitectureSessionOptions;
   }) => void;
