@@ -130,6 +130,8 @@ export async function createModalSandbox(
         // Install the Gemini CLI globally (executed directly by gemini agents)
         'RUN npm install -g @google/gemini-cli',
 
+        'RUN npm i -g opencode-ai@latest',
+
         'RUN npm install -g tsx',
 
         'RUN npm install -g chokidar-cli',
