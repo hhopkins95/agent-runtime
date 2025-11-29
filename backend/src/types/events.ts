@@ -13,6 +13,7 @@
 
 import { SessionListItem, SessionRuntimeState, WorkspaceFile } from "./session/index";
 import { ConversationBlock } from "./session/blocks";
+import { AgentArchitectureSessionOptions } from "../lib/agent-architectures/base";
 
 // ============================================================================
 // Server → Client Events
@@ -95,6 +96,16 @@ export interface ServerToClientEvents {
       [key: string]: unknown;
     };
   }) => void;
+
+
+  /**
+   * Session options updated
+   */
+  'session.options:update': (data: {
+    sessionId: string;
+    options: AgentArchitectureSessionOptions;
+  }) => void;
+
 
   // -------------------------------------------------------------------------
   // Subagent Events (session:subagent:*)

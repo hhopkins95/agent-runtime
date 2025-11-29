@@ -14,6 +14,7 @@
 import { EventEmitter } from 'events';
 import type { WorkspaceFile, SessionRuntimeState } from '../types/session/index.js';
 import type { ConversationBlock } from '../types/session/blocks.js';
+import { AgentArchitectureSessionOptions } from '../lib/agent-architectures/base.js';
 
 /**
  * Domain events emitted by business logic
@@ -110,6 +111,15 @@ export interface DomainEvents {
       model?: string;
       [key: string]: unknown;
     };
+  };
+
+  /**
+   * Session options updated
+   * Emitted by: AgentSession.updateSessionOptions()
+   */
+  'session:options:update': {
+    sessionId: string;
+    options: AgentArchitectureSessionOptions;
   };
 
   // ============================================================================

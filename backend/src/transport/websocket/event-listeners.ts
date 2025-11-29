@@ -178,6 +178,16 @@ export function setupEventListeners(
     );
   });
 
+
+  /**
+   * Session options updated
+   */
+  eventBus.on('session:options:update', (data) => {
+    io.to(`session:${data.sessionId}`).emit('session.options:update', {
+      sessionId: data.sessionId,
+      options: data.options,
+    });
+  });
   // ==========================================================================
   // Subagent Events
   // ==========================================================================

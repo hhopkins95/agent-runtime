@@ -688,6 +688,17 @@ export class AgentSession {
     await this.persistFullSessionState();
   }
 
+  async updateSessionOptions(sessionOptions: AgentArchitectureSessionOptions): Promise<void> {
+    this.sessionOptions = sessionOptions;
+    await this.persistenceAdapter.updateSessionRecord(this.sessionId, {
+      sessionOptions: sessionOptions,
+    });
+    this.eventBus.emit('session:options:update', {
+      sessionId: this.sessionId,
+      options: sessionOptions,
+    });
+  }
+
   /**
    * Destroy session and cleanup resources
    */

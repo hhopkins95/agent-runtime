@@ -2,13 +2,14 @@ import { ClaudeSDKAdapter } from "./claude-sdk";
 import { GeminiCLIAdapter } from "./gemini-cli";
 import { OpenCodeAdapter } from "./opencode";
 import { AGENT_ARCHITECTURE_TYPE } from "../../types/session/index";
+import { AgentArchitectureAdapter } from "./base";
 import { SandboxPrimitive } from "../sandbox/base";
 import { ConversationBlock } from "../../types/session/blocks";
 
-export const getAgentArchitectureAdapter = (architecture : AGENT_ARCHITECTURE_TYPE, sandbox : SandboxPrimitive, sessionId : string) => {
+export const getAgentArchitectureAdapter = (architecture : AGENT_ARCHITECTURE_TYPE, sandbox : SandboxPrimitive, sessionId : string) : AgentArchitectureAdapter<any> => {
     switch (architecture) {
         case "claude-agent-sdk":
-            return new ClaudeSDKAdapter(sandbox, sessionId);
+            return new ClaudeSDKAdapter(sandbox, sessionId) 
         case "gemini-cli":
             return new GeminiCLIAdapter(sandbox, sessionId);
         case "opencode":
