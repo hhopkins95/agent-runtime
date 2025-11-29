@@ -26,6 +26,7 @@ export class ModalSandbox implements SandboxPrimitive {
 
     public getId(): string {
         return this.sandbox.sandboxId;
+        
     }
 
     public getBasePaths(): { APP_DIR: string, WORKSPACE_DIR: string, HOME_DIR: string } {

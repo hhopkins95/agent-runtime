@@ -102,6 +102,19 @@ async function executeQuery() {
       }
     })();
 
+
+    // authenticate 
+    await client.auth.set({
+      path : { id : "zen"}, 
+      body : {
+        type : "api", 
+        key : process.env.OPENCODE_API_KEY || "", 
+      }
+
+
+    })
+
+
     // Send the prompt
     await client.session.prompt({
       path: { id: actualSessionId },

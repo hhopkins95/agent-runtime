@@ -152,6 +152,7 @@ export async function createModalSandbox(
       env: {
         ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
         CLAUDE_CODE_CWD: workdir,
+        OPENCODE_API_KEY: process.env.OPENCODE_API_KEY || "",
         IS_SANDBOX: "1", // see https://github.com/anthropics/claude-agent-sdk-typescript/issues/54
       },
     });
