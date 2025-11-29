@@ -63,9 +63,9 @@ export class ModalSandbox implements SandboxPrimitive {
      * Execute a command in the sandbox
      * Returns the same process type as Modal's sandbox.exec()
      */
-    async exec(command: string[], workdir: string = '/app') {
+    async exec(command: string[], options?: { cwd?: string }) {
         return await this.sandbox.exec(command, {
-            workdir: workdir,
+            workdir: options?.cwd,
         });
     }
 

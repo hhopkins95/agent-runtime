@@ -33,7 +33,7 @@ export interface SandboxPrimitive {
         HOME_DIR : string,
     }
 
-    exec : (command : string[]) => Promise<{stdout : ReadableStream, stderr : ReadableStream, wait : () => Promise<number> }>,
+    exec : (command : string[], options? : {cwd? : string}) => Promise<{stdout : ReadableStream, stderr : ReadableStream, wait : () => Promise<number> }>,
 
     readFile : (path : string) => Promise<string | null>,
 
