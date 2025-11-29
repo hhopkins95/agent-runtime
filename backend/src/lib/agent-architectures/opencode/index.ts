@@ -30,6 +30,8 @@ export interface OpenCodeSessionOptions {
 
 export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSessionOptions> {
 
+  private transcriptChangeCallback?: (event: TranscriptChangeEvent) => void;
+
   public constructor(
     private readonly sandbox: SandboxPrimitive,
     private readonly sessionId: string
@@ -268,10 +270,16 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
 
     // Check for failed execution with no output
     if (messageCount === 0 && stderrLines.length > 0) {
-      throw new Error(`Claude SDK failed with no output. Stderr: ${stderrLines.join('\n')}`);
+      throw new Error(`OpenCode SDK failed with no output. Stderr: ${stderrLines.join('\n')}`);
     }
 
-    logger.info({ sessionId: this.sessionId, messageCount }, 'Claude SDK query completed');
+    // emit a transcript change event
+    const newTranscript = await this.readSessionTranscripts({})
+    if (newTranscript.main) {
+      this.emitTranscriptChange({ type: 'main', content: newTranscript.main });
+    }
+
+    logger.info({ sessionId: this.sessionId, messageCount }, 'OpenCode SDK query completed');
   } catch(error: Error) {
     logger.error({ error, sessionId: this.sessionId }, 'Error during SDK execution');
     throw error;
@@ -315,16 +323,12 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
   }
 
   public async watchSessionTranscriptChanges(callback: (event: TranscriptChangeEvent) => void): Promise<void> {
-    const paths = this.getPaths();
-    const storagePath = `${paths.AGENT_STORAGE_DIR}/storage`;
+    this.transcriptChangeCallback = callback;
+  }
 
-    await this.sandbox.watch(storagePath, async (event) => {
-      // Only process file additions and changes (not unlinks)
-      if (event.type === 'unlink' || !event.content) {
-        return;
-      }
-
-    
-    });
+  protected emitTranscriptChange(event: TranscriptChangeEvent): void {
+    if (this.transcriptChangeCallback) {
+      this.transcriptChangeCallback(event);
+    }
   }
 }
