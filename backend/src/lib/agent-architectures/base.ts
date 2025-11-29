@@ -35,8 +35,6 @@ export interface AgentArchitectureAdapter<ArchitectureSessionOptions extends Rec
         AGENT_MD_FILE : string,
     }
 
-    identifySessionTranscriptFile : (args : {fileName : string, content : string}) => {isMain : true} | {subagentId : string} | null
-
     setupAgentProfile : (args : {agentProfile : AgentProfile}) => Promise<void>,
 
     setupSessionTranscripts : (args : {sessionId : string, mainTranscript : string, subagents : {id : string, transcript : string}[]}) => Promise<void>,

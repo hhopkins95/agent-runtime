@@ -47,21 +47,6 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     };
   }
 
-  public identifySessionTranscriptFile(args: {
-    fileName: string;
-    content: string;
-  }): { isMain: true } | { subagentId: string } | null {
-    // OpenCode uses .json files in specific directories
-    if (!args.fileName.endsWith('.json')) {
-      return null;
-    }
-
-    // Session files are the main transcripts
-    // OpenCode doesn't have separate subagent transcript files like Claude
-    // Subagents are handled inline via 'agent' and 'subtask' parts
-    return { isMain: true };
-  }
-
   public async setupAgentProfile(args: { agentProfile: AgentProfile }): Promise<void> {
     const paths = this.getPaths();
     const profile = args.agentProfile;

@@ -44,7 +44,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         }
     }
 
-    public identifySessionTranscriptFile(args: {fileName: string, content: string}): {isMain: true} | {subagentId: string} | null {
+    private identifySessionTranscriptFile(args: {fileName: string, content: string}): {isMain: true} | {subagentId: string} | null {
         // Claude SDK transcript files:
         // - Main session: {sessionId}.jsonl
         // - Subagents: agent-{uuid}.jsonl
