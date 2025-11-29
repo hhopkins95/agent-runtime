@@ -22,6 +22,7 @@ import type {
   AGENT_ARCHITECTURE_TYPE,
   PersistedSessionListData,
 } from '../types/session/index.js';
+import type { AgentArchitectureSessionOptions } from '../lib/agent-architectures/base.js';
 import type { PersistenceAdapter } from '../types/persistence-adapter.js';
 
 /**
@@ -96,7 +97,8 @@ export class SessionManager {
    */
   async createSession(request: {
     agentProfileRef: string,
-    architecture: AGENT_ARCHITECTURE_TYPE
+    architecture: AGENT_ARCHITECTURE_TYPE,
+    sessionOptions?: AgentArchitectureSessionOptions,
   }): Promise<AgentSession> {
     try {
       logger.info({ request }, 'Creating new session...');
@@ -105,7 +107,8 @@ export class SessionManager {
       const session = await AgentSession.create(
         {
           agentProfileRef: request.agentProfileRef,
-          architecture: request.architecture
+          architecture: request.architecture,
+          sessionOptions: request.sessionOptions ?? {},
         },
         this.modalContext,
         this.eventBus,

@@ -20,6 +20,10 @@ export type {
   // Session types (deprecated - use SessionListItem instead)
   SessionStatus,
   SessionListData,
+  // Session options types
+  AgentArchitectureSessionOptions,
+  ClaudeSDKSessionOptions,
+  OpenCodeSessionOptions,
   // Block types
   TextContent,
   ImageContent,
@@ -116,12 +120,24 @@ export interface SubagentState {
 export interface CreateSessionRequest {
   agentProfileRef: string;
   architecture: import('@hhopkins/agent-runtime/types').AGENT_ARCHITECTURE_TYPE;
+  sessionOptions?: import('@hhopkins/agent-runtime/types').AgentArchitectureSessionOptions;
 }
 
 export interface CreateSessionResponse {
   sessionId: string;
   runtime: import('@hhopkins/agent-runtime/types').SessionRuntimeState;
   createdAt: number;
+  sessionOptions?: import('@hhopkins/agent-runtime/types').AgentArchitectureSessionOptions;
+}
+
+export interface UpdateSessionOptionsRequest {
+  sessionOptions: import('@hhopkins/agent-runtime/types').AgentArchitectureSessionOptions;
+}
+
+export interface UpdateSessionOptionsResponse {
+  success: boolean;
+  sessionId: string;
+  sessionOptions: import('@hhopkins/agent-runtime/types').AgentArchitectureSessionOptions;
 }
 
 export interface SendMessageRequest {

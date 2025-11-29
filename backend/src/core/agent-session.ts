@@ -718,6 +718,7 @@ export class AgentSession {
       lastActivity: this.lastActivity,
       createdAt: this.createdAt,
       type: this.architecture,
+      sessionOptions: this.sessionOptions,
       runtime: this.getRuntimeState(),
       blocks: this.blocks,
       workspaceFiles: this.workspaceFiles,
@@ -736,6 +737,7 @@ export class AgentSession {
       sessionId: this.sessionId,
       type: this.architecture,
       agentProfileReference: this.agentProfile.id,
+      sessionOptions: this.sessionOptions,
       lastActivity: this.lastActivity,
       createdAt: this.createdAt,
     };

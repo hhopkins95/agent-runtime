@@ -103,4 +103,14 @@ export type {
   SocketData,
 } from './events';
 
+// ============================================================================
+// Session Options Types
+// ============================================================================
+
+export type {
+  AgentArchitectureSessionOptions,
+  ClaudeSDKSessionOptions,
+  OpenCodeSessionOptions,
+} from '../lib/agent-architectures/base';
+
 

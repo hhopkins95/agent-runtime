@@ -49,7 +49,8 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
         name TEXT,
         last_activity INTEGER,
         created_at INTEGER,
-        metadata TEXT
+        metadata TEXT,
+        session_options TEXT
       );
 
       -- Transcripts table (separate for potentially large content)
@@ -77,8 +78,12 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
       );
     `);
 
-    // Migration: Remove status column if it exists (for existing databases)
-    // SQLite doesn't support DROP COLUMN easily, so we'll just ignore the column
+    // Migration: Add session_options column if it doesn't exist (for existing databases)
+    try {
+      this.db.exec(`ALTER TABLE sessions ADD COLUMN session_options TEXT`);
+    } catch {
+      // Column already exists, ignore
+    }
   }
 
   private seedProfiles(profiles: AgentProfile[]): void {
@@ -108,7 +113,7 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
   async listAllSessions(): Promise<PersistedSessionListData[]> {
     const rows = this.db
       .prepare(
-        `SELECT session_id, type, agent_profile_reference, name, last_activity, created_at, metadata
+        `SELECT session_id, type, agent_profile_reference, name, last_activity, created_at, metadata, session_options
          FROM sessions`
       )
       .all() as any[];
@@ -121,6 +126,7 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
       lastActivity: row.last_activity ?? undefined,
       createdAt: row.created_at ?? undefined,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      sessionOptions: row.session_options ? JSON.parse(row.session_options) : undefined,
     }));
   }
 
@@ -128,7 +134,7 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
     // Get session
     const session = this.db
       .prepare(
-        `SELECT session_id, type, agent_profile_reference, name, last_activity, created_at, metadata
+        `SELECT session_id, type, agent_profile_reference, name, last_activity, created_at, metadata, session_options
          FROM sessions WHERE session_id = ?`
       )
       .get(sessionId) as any;
@@ -164,6 +170,7 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
       lastActivity: session.last_activity ?? undefined,
       createdAt: session.created_at ?? undefined,
       metadata: session.metadata ? JSON.parse(session.metadata) : undefined,
+      sessionOptions: session.session_options ? JSON.parse(session.session_options) : undefined,
       rawTranscript: mainTranscript?.content,
       subagents: subagentRows.map((row) => ({
         id: row.subagent_id,
@@ -179,8 +186,8 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
   async createSessionRecord(session: PersistedSessionListData): Promise<void> {
     this.db
       .prepare(
-        `INSERT INTO sessions (session_id, type, agent_profile_reference, name, last_activity, created_at, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sessions (session_id, type, agent_profile_reference, name, last_activity, created_at, metadata, session_options)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         session.sessionId,
@@ -189,7 +196,8 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
         session.name ?? null,
         session.lastActivity ?? null,
         session.createdAt ?? null,
-        session.metadata ? JSON.stringify(session.metadata) : null
+        session.metadata ? JSON.stringify(session.metadata) : null,
+        session.sessionOptions ? JSON.stringify(session.sessionOptions) : null
       );
   }
 
@@ -224,6 +232,10 @@ export class SqlitePersistenceAdapter implements PersistenceAdapter {
     if (updates.metadata !== undefined) {
       fields.push("metadata = ?");
       values.push(JSON.stringify(updates.metadata));
+    }
+    if (updates.sessionOptions !== undefined) {
+      fields.push("session_options = ?");
+      values.push(JSON.stringify(updates.sessionOptions));
     }
 
     if (fields.length === 0) {

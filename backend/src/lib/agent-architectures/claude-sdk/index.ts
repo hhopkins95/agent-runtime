@@ -13,9 +13,8 @@ import { randomUUID } from "crypto";
 
 
 
-export interface ClaudeSDKSessionOptions { 
-    model? : string,
-    foo : string
+export interface ClaudeSDKSessionOptions {
+    model?: string,
 }
 
 

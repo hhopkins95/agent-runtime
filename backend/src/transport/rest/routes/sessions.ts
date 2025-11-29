@@ -4,6 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import type { SessionManager } from "../../../core/session-manager";
 import type { EventBus } from "../../../core/event-bus";
+import type { AgentArchitectureSessionOptions } from "../../../lib/agent-architectures/base";
 import { errorResponse } from "../server";
 
 export function createSessionRoutes(
@@ -22,14 +23,19 @@ export function createSessionRoutes(
       "json",
       z.object({
         agentProfileRef: z.string(),
-        architecture: z.enum(["claude-agent-sdk", "gemini-cli"]),
+        architecture: z.enum(["claude-agent-sdk", "gemini-cli", "opencode"]),
+        sessionOptions: z.record(z.unknown()).optional(),
       })
     ),
     async (c) => {
-      const { agentProfileRef, architecture } = c.req.valid("json");
+      const { agentProfileRef, architecture, sessionOptions } = c.req.valid("json");
 
       try {
-        const session = await sessionManager.createSession({ agentProfileRef, architecture });
+        const session = await sessionManager.createSession({
+          agentProfileRef,
+          architecture,
+          sessionOptions: sessionOptions as AgentArchitectureSessionOptions,
+        });
         const sessionData = session.getState();
 
         return c.json(
@@ -37,6 +43,7 @@ export function createSessionRoutes(
             sessionId: sessionData.sessionId,
             runtime: sessionData.runtime,
             createdAt: sessionData.createdAt,
+            sessionOptions: sessionData.sessionOptions,
           },
           201
         );
@@ -186,6 +193,53 @@ export function createSessionRoutes(
       });
     }
   })
+
+  /**
+   * PATCH /api/sessions/:id/options
+   * Update session options
+   */
+  .patch(
+    "/:id/options",
+    zValidator(
+      "json",
+      z.object({
+        sessionOptions: z.record(z.unknown()),
+      })
+    ),
+    async (c) => {
+      const sessionId = c.req.param("id");
+      const { sessionOptions } = c.req.valid("json");
+
+      let session = sessionManager.getSession(sessionId);
+
+      if (!session) {
+        try {
+          session = await sessionManager.loadSession(sessionId);
+        } catch {
+          throw new HTTPException(404, {
+            message: JSON.stringify(
+              errorResponse("Session not found", "SESSION_NOT_FOUND")
+            ),
+          });
+        }
+      }
+
+      try {
+        await session.updateSessionOptions(sessionOptions as AgentArchitectureSessionOptions);
+        return c.json({ success: true, sessionId, sessionOptions });
+      } catch (error) {
+        throw new HTTPException(500, {
+          message: JSON.stringify(
+            errorResponse(
+              "Failed to update session options",
+              "SESSION_OPTIONS_UPDATE_FAILED",
+              error instanceof Error ? error.message : String(error)
+            )
+          ),
+        });
+      }
+    }
+  )
 
   return app;
 }

@@ -12,8 +12,10 @@ import type {
   CreateSessionResponse,
   SendMessageRequest,
   SendMessageResponse,
+  UpdateSessionOptionsResponse,
   ApiError,
   AGENT_ARCHITECTURE_TYPE,
+  AgentArchitectureSessionOptions,
 } from '../types';
 
 export class RestClient {
@@ -80,17 +82,35 @@ export class RestClient {
    */
   async createSession(
     agentProfileRef: string,
-    architecture: AGENT_ARCHITECTURE_TYPE
+    architecture: AGENT_ARCHITECTURE_TYPE,
+    sessionOptions?: AgentArchitectureSessionOptions
   ): Promise<CreateSessionResponse> {
     const body: CreateSessionRequest = {
       agentProfileRef,
       architecture,
+      ...(sessionOptions && { sessionOptions }),
     };
 
     return this.request<CreateSessionResponse>('/api/sessions', {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  }
+
+  /**
+   * Update session options
+   */
+  async updateSessionOptions(
+    sessionId: string,
+    sessionOptions: AgentArchitectureSessionOptions
+  ): Promise<UpdateSessionOptionsResponse> {
+    return this.request<UpdateSessionOptionsResponse>(
+      `/api/sessions/${sessionId}/options`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ sessionOptions }),
+      }
+    );
   }
 
   /**

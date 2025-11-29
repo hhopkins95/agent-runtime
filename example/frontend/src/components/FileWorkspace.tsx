@@ -64,7 +64,7 @@ export function FileWorkspace({ sessionId }: FileWorkspaceProps) {
               >
                 <div className="text-sm font-medium truncate">{file.path}</div>
                 <div className="text-xs text-gray-500">
-                  {file.content.length} characters
+                  {file.content?.length ?? 0} characters
                 </div>
               </button>
             ))}
@@ -92,13 +92,13 @@ export function FileWorkspace({ sessionId }: FileWorkspaceProps) {
                   {selectedFileData.path}
                 </h3>
                 <div className="text-xs text-gray-500">
-                  {selectedFileData.content.length} characters
+                  {selectedFileData.content?.length ?? 0} characters
                 </div>
               </div>
 
               <div className="bg-gray-50 border rounded-lg p-4 overflow-x-auto">
                 <pre className="text-sm">
-                  <code>{selectedFileData.content}</code>
+                  <code>{selectedFileData.content ?? ''}</code>
                 </pre>
               </div>
             </div>

@@ -66,6 +66,11 @@ export type {
   StreamingBlock,
   SubagentState,
 
+  // Session Options
+  AgentArchitectureSessionOptions,
+  ClaudeSDKSessionOptions,
+  OpenCodeSessionOptions,
+
   // Architecture & Session (deprecated)
   SessionStatus,
   SessionListData,

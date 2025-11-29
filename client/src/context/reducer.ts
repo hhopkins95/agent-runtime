@@ -21,6 +21,7 @@ import type {
   SessionMetadata,
   StreamingContent,
   SubagentState,
+  AgentArchitectureSessionOptions,
 } from '../types';
 
 // ============================================================================
@@ -95,6 +96,9 @@ export type AgentServiceAction =
 
   // Session Runtime
   | { type: 'SESSION_RUNTIME_UPDATED'; sessionId: string; runtime: SessionRuntimeState }
+
+  // Session Options
+  | { type: 'SESSION_OPTIONS_UPDATED'; sessionId: string; sessionOptions: AgentArchitectureSessionOptions }
 
   // Streaming Events
   | {
@@ -308,6 +312,31 @@ export function agentServiceReducer(
         sessionList: state.sessionList.map((s) =>
           s.sessionId === action.sessionId
             ? { ...s, runtime: action.runtime }
+            : s
+        ),
+      };
+    }
+
+    case 'SESSION_OPTIONS_UPDATED': {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get(action.sessionId);
+
+      if (session) {
+        sessions.set(action.sessionId, {
+          ...session,
+          info: {
+            ...session.info,
+            sessionOptions: action.sessionOptions,
+          },
+        });
+      }
+
+      return {
+        ...state,
+        sessions,
+        sessionList: state.sessionList.map((s) =>
+          s.sessionId === action.sessionId
+            ? { ...s, sessionOptions: action.sessionOptions }
             : s
         ),
       };

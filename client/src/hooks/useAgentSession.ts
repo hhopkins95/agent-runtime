@@ -10,6 +10,7 @@ import { AgentServiceContext } from '../context/AgentServiceContext';
 import type {
   AGENT_ARCHITECTURE_TYPE,
   SessionRuntimeState,
+  AgentArchitectureSessionOptions,
 } from '../types';
 import type { SessionState } from '../context/reducer';
 
@@ -40,7 +41,8 @@ export interface UseAgentSessionResult {
    */
   createSession: (
     agentProfileRef: string,
-    architecture: AGENT_ARCHITECTURE_TYPE
+    architecture: AGENT_ARCHITECTURE_TYPE,
+    sessionOptions?: AgentArchitectureSessionOptions
   ) => Promise<string>;
 
   /**
@@ -57,6 +59,13 @@ export interface UseAgentSessionResult {
    * Manually sync session state to persistence
    */
   syncSession: () => Promise<void>;
+
+  /**
+   * Update session options
+   */
+  updateSessionOptions: (
+    sessionOptions: AgentArchitectureSessionOptions
+  ) => Promise<void>;
 }
 
 /**
@@ -143,7 +152,8 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
   const createSession = useCallback(
     async (
       agentProfileRef: string,
-      architecture: AGENT_ARCHITECTURE_TYPE
+      architecture: AGENT_ARCHITECTURE_TYPE,
+      sessionOptions?: AgentArchitectureSessionOptions
     ): Promise<string> => {
       setIsLoading(true);
       setError(null);
@@ -151,13 +161,15 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
       try {
         const response = await restClient.createSession(
           agentProfileRef,
-          architecture
+          architecture,
+          sessionOptions
         );
 
         const newSession = {
           sessionId: response.sessionId,
           type: architecture,
           agentProfileReference: agentProfileRef,
+          sessionOptions: response.sessionOptions,
           runtime: response.runtime,
           createdAt: response.createdAt,
         };
@@ -219,6 +231,37 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
     }
   }, [currentSessionId, restClient]);
 
+  const updateSessionOptions = useCallback(
+    async (sessionOptions: AgentArchitectureSessionOptions) => {
+      if (!currentSessionId) {
+        throw new Error('No session to update options for');
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await restClient.updateSessionOptions(
+          currentSessionId,
+          sessionOptions
+        );
+
+        dispatch({
+          type: 'SESSION_OPTIONS_UPDATED',
+          sessionId: currentSessionId,
+          sessionOptions: response.sessionOptions,
+        });
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        setError(error);
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentSessionId, restClient, dispatch]
+  );
+
   return {
     session,
     runtime,
@@ -228,5 +271,6 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
     loadSession,
     destroySession,
     syncSession,
+    updateSessionOptions,
   };
 }
