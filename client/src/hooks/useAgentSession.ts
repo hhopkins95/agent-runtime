@@ -94,8 +94,10 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
   }, [sessionId]);
 
   // Join/leave WebSocket room when session changes
+  // Only join when session exists in state (not just when we have an ID)
+  // This prevents a race condition where events arrive before the session is loaded
   useEffect(() => {
-    if (currentSessionId) {
+    if (currentSessionId && state.sessions.has(currentSessionId)) {
       wsManager.joinSession(currentSessionId).catch((err) => {
         console.error('[useAgentSession] Failed to join session room:', err);
       });
@@ -106,7 +108,7 @@ export function useAgentSession(sessionId?: string): UseAgentSessionResult {
         });
       };
     }
-  }, [currentSessionId, wsManager]);
+  }, [currentSessionId, state.sessions, wsManager]);
 
   const loadSessionById = async (id: string) => {
     setIsLoading(true);

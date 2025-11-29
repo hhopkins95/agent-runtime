@@ -8,7 +8,7 @@
  * ready-to-render data with streaming content included.
  */
 
-import { useContext, useCallback, useState, useMemo, useEffect } from 'react';
+import { useContext, useCallback, useState, useMemo } from 'react';
 import { AgentServiceContext } from '../context/AgentServiceContext';
 import type { ConversationBlock, UserMessageBlock, SessionMetadata } from '../types';
 
@@ -74,21 +74,8 @@ export function useMessages(sessionId: string): UseMessagesResult {
   const { state, dispatch, restClient } = context;
   const [error, setError] = useState<Error | null>(null);
 
-  // Load session data from REST API if not already in state
-  useEffect(() => {
-    if (sessionId && !state.sessions.has(sessionId)) {
-      restClient.getSession(sessionId)
-        .then((data) => {
-          dispatch({ type: 'SESSION_LOADED', sessionId, data });
-        })
-        .catch((err) => {
-          console.error('[useMessages] Failed to load session data:', err);
-        });
-    }
-  }, [sessionId, state.sessions, restClient, dispatch]);
-
-  // Note: Room join/leave is handled by useAgentSession to ensure
-  // room membership persists across component lifecycle changes
+  // Note: Session loading and room join/leave is handled by useAgentSession
+  // to ensure proper ordering (session must exist before joining room)
 
   const session = state.sessions.get(sessionId);
 
