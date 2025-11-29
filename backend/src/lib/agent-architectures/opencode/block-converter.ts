@@ -461,7 +461,7 @@ function parseSessionIdleEvent(
  * @param mainSessionId - The ID of the main session (to determine conversationId)
  * @returns Array of StreamEvents to emit
  */
-export function parseStreamEvent(event: Event, mainSessionId: string): StreamEvent[] {
+export function parseOpencodeStreamEvent(event: Event, mainSessionId: string): StreamEvent[] {
   try {
     switch (event.type) {
       case 'message.part.updated':

@@ -17,11 +17,14 @@ import { SandboxPrimitive } from '../../sandbox/base.js';
 import { ConversationBlock } from '../../../types/session/blocks.js';
 import { logger } from '../../../config/logger.js';
 import { randomUUID } from 'crypto';
+import { parseOpenCodeTranscriptFile } from './opencode-transcript-parser.js';
+import { streamJSONL } from '../../helpers/stream.js';
+import { Event as OpenCodeEvent } from '@opencode-ai/sdk';
+import { parseOpencodeStreamEvent } from './block-converter.js';
 
 
-
-export interface OpenCodeSessionOptions { 
-  model? : string,
+export interface OpenCodeSessionOptions {
+  model?: string,
 }
 
 
@@ -30,7 +33,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
   public constructor(
     private readonly sandbox: SandboxPrimitive,
     private readonly sessionId: string
-  ) {}
+  ) { }
 
   public getPaths(): {
     AGENT_STORAGE_DIR: string;
@@ -225,163 +228,59 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
   }
 
   public async *executeQuery(args: { query: string }): AsyncGenerator<StreamEvent> {
-    // TODO: Implement actual OpenCode execution
-    // This will either:
-    // 1. Use `opencode serve` HTTP API with SSE streaming
-    // 2. Use `opencode -p "prompt" -f json` CLI mode
+    const command = ['tsx', '/app/execute-opencode-query.ts', args.query, '--session-id', this.sessionId];
 
-    logger.warn({ sessionId: this.sessionId }, 'OpenCode executeQuery not yet implemented');
+    logger.debug({ command }, 'Executing OpenCode command');
 
-    throw new Error('OpenCode executeQuery not yet implemented. This is a stub implementation.');
+    // Execute SDK script in sandbox
+    const { stdout, stderr } = await this.sandbox.exec(command);
+
+    // Capture stderr in background
+    const stderrLines: string[] = [];
+    const stderrPromise = (async () => {
+      try {
+        for await (const line of streamJSONL<any>(stderr, 'opencode-stderr', logger)) {
+          stderrLines.push(JSON.stringify(line));
+          logger.warn({ sessionId: this.sessionId, stderr: line }, 'Claude SDK stderr');
+        }
+      } catch (error) {
+        // Stderr parsing errors are not critical
+        logger.debug({ error }, 'Error parsing stderr (non-critical)');
+      }
+    })();
+
+    // Stream JSONL messages and convert to StreamEvents
+    let messageCount = 0;
+    for await (const opencodeEvent of streamJSONL<OpenCodeEvent>(stdout, 'claude-sdk', logger)) {
+      messageCount++;
+
+
+
+      // Convert SDK message to StreamEvents and yield each one
+      const streamEvents = parseOpencodeStreamEvent(opencodeEvent, this.sessionId);
+      for (const event of streamEvents) {
+        yield event;
+      }
+    }
+
+    // Wait for stderr reader to complete
+    await stderrPromise;
+
+    // Check for failed execution with no output
+    if (messageCount === 0 && stderrLines.length > 0) {
+      throw new Error(`Claude SDK failed with no output. Stderr: ${stderrLines.join('\n')}`);
+    }
+
+    logger.info({ sessionId: this.sessionId, messageCount }, 'Claude SDK query completed');
+  } catch(error: Error) {
+    logger.error({ error, sessionId: this.sessionId }, 'Error during SDK execution');
+    throw error;
   }
+
 
   public parseTranscripts(rawTranscript: string, subagents: { id: string; transcript: string }[]): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
     return OpenCodeAdapter.parseTranscripts(rawTranscript, subagents);
   }
-
-  /**
-   * Convert an OpenCode part to ConversationBlock(s)
-   */
-  private static convertPartToBlocks(part: OpenCodePart, message: OpenCodeMessage): ConversationBlock[] {
-    const timestamp = new Date(getPartStartTime(part) || message.time.created).toISOString();
-
-    switch (part.type) {
-      case 'text':
-        return [
-          {
-            type: 'assistant_text',
-            id: part.id,
-            timestamp,
-            content: part.text,
-            model: message.role === 'assistant' ? message.modelID : undefined,
-          },
-        ];
-
-      case 'reasoning':
-        return [
-          {
-            type: 'thinking',
-            id: part.id,
-            timestamp,
-            content: part.text,
-          },
-        ];
-
-      case 'tool': {
-        const blocks: ConversationBlock[] = [
-          {
-            type: 'tool_use',
-            id: part.id,
-            timestamp,
-            toolName: part.tool,
-            toolUseId: part.callID,
-            input: part.state.input || {},
-            status: OpenCodeAdapter.mapToolStatus(part.state.status),
-          },
-        ];
-
-        // Add result if completed or errored
-        if (part.state.status === 'completed' || part.state.status === 'error') {
-          const endTime = part.state.time?.end || part.time?.end;
-          const startTime = part.state.time?.start || part.time?.start;
-          const durationMs = endTime && startTime ? endTime - startTime : undefined;
-
-          blocks.push({
-            type: 'tool_result',
-            id: `${part.id}_result`,
-            timestamp: endTime ? new Date(endTime).toISOString() : timestamp,
-            toolUseId: part.callID,
-            output: part.state.output,
-            isError: part.state.status === 'error',
-            durationMs,
-          });
-        }
-
-        return blocks;
-      }
-
-      case 'step-start':
-        return [
-          {
-            type: 'system',
-            id: part.id,
-            timestamp,
-            subtype: 'session_start',
-            message: `Step ${part.step} started`,
-            metadata: { step: part.step, snapshot: part.snapshot },
-          },
-        ];
-
-      case 'step-finish':
-        return [
-          {
-            type: 'system',
-            id: part.id,
-            timestamp,
-            subtype: 'session_end',
-            message: `Step ${part.step} finished`,
-            metadata: {
-              step: part.step,
-              tokens: part.tokens,
-              cost: part.cost,
-            },
-          },
-        ];
-
-      case 'subtask':
-        return [
-          {
-            type: 'subagent',
-            id: part.id,
-            timestamp,
-            subagentId: `subtask-${part.id}`,
-            name: part.agent,
-            input: part.prompt,
-            status: 'pending',
-          },
-        ];
-
-      case 'agent':
-        return [
-          {
-            type: 'subagent',
-            id: part.id,
-            timestamp,
-            subagentId: part.source?.sessionID || `agent-${part.id}`,
-            name: part.name,
-            input: '',
-            status: 'success',
-          },
-        ];
-
-      case 'retry':
-        return [
-          {
-            type: 'system',
-            id: part.id,
-            timestamp,
-            subtype: 'error',
-            message: `Retry attempt ${part.attempt}: ${part.error.message}`,
-            metadata: {
-              attempt: part.attempt,
-              error: part.error,
-            },
-          },
-        ];
-
-      // Parts we don't convert to blocks
-      case 'file':
-      case 'snapshot':
-      case 'patch':
-      case 'compaction':
-        return [];
-
-      default:
-        logger.warn({ partType: (part as any).type }, 'Unknown OpenCode part type');
-        return [];
-    }
-  }
-
 
   // Static methods
   public static createSessionId(): string {
@@ -391,7 +290,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     return `ses_${timeBytes}_${random}`;
   }
 
- public static parseTranscripts(
+  public static parseTranscripts(
     rawTranscript: string,
     subagents: { id: string; transcript: string }[]
   ): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
@@ -399,32 +298,8 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
       return { blocks: [], subagents: [] };
     }
 
-    const transcript: OpenCodeSessionTranscript = JSON.parse(rawTranscript);
-    const blocks: ConversationBlock[] = [];
+    return parseOpenCodeTranscriptFile(rawTranscript)
 
-    for (const { message, parts } of transcript.messages) {
-      if (message.role === 'user') {
-        // Extract text from user message parts
-        const textParts = parts.filter((p) => p.type === 'text');
-        const content = textParts.map((p) => (p as any).text).join('\n');
-
-        blocks.push({
-          type: 'user_message',
-          id: message.id,
-          timestamp: new Date(message.time.created).toISOString(),
-          content,
-        });
-      } else if (message.role === 'assistant') {
-        // Process each part
-        for (const part of parts) {
-          const partBlocks = OpenCodeAdapter.convertPartToBlocks(part, message);
-          blocks.push(...partBlocks);
-        }
-      }
-    }
-
-    // OpenCode doesn't have separate subagent transcripts
-    return { blocks, subagents: [] };
   }
 
   public async watchWorkspaceFiles(callback: (event: WorkspaceFileEvent) => void): Promise<void> {
@@ -449,23 +324,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
         return;
       }
 
-      const fileName = basename(event.path);
-      const identification = this.identifySessionTranscriptFile({ fileName, content: event.content });
-
-      if (!identification) {
-        return;
-      }
-
-      // OpenCode doesn't have separate subagent transcripts - all changes are main
-      // We need to re-read the full session to get the complete transcript
-      try {
-        const { main } = await this.readSessionTranscripts({});
-        if (main) {
-          callback({ type: 'main', content: main });
-        }
-      } catch (error) {
-        logger.error({ error, path: event.path }, 'Error reading session transcripts on file change');
-      }
+    
     });
   }
 }
