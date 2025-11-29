@@ -33,7 +33,7 @@ import type { EventBus } from './event-bus.js';
 import type { SandboxPrimitive, WatchEvent } from '../lib/sandbox/base.js';
 import type { AgentArchitectureAdapter, AgentArchitectureSessionOptions } from '../lib/agent-architectures/base.js';
 import { createSandbox } from '../lib/sandbox/factory.js';
-import { getAgentArchitectureAdapter, parseTranscripts } from '../lib/agent-architectures/factory.js';
+import { createSessionId, getAgentArchitectureAdapter, parseTranscripts } from '../lib/agent-architectures/factory.js';
 
 /**
  * Callback type for sandbox termination notification
@@ -123,13 +123,13 @@ export class AgentSession {
       });
     } else {
       // Create a new session
-      const uuid = randomUUID();
+      const newSessionId = createSessionId(input.architecture);
       const agentProfile = await persistenceAdapter.loadAgentProfile(input.agentProfileRef);
       if (!agentProfile) {
         throw new Error(`Agent profile ${input.agentProfileRef} not found in persistence`);
       }
 
-      sessionInput = { newSessionId: uuid, architecture: input.architecture, sessionOptions: input.sessionOptions };
+      sessionInput = { newSessionId: newSessionId, architecture: input.architecture, sessionOptions: input.sessionOptions };
       session = new AgentSession({
         modalContext,
         eventBus,
