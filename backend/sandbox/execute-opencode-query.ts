@@ -21,7 +21,9 @@
  */
 
 import { createOpencode } from "@opencode-ai/sdk";
+import { exec } from "child_process";
 import { Command } from "commander";
+import { writeFile } from "fs/promises";
 
 // Configure commander program
 const program = new Command()
@@ -73,21 +75,14 @@ async function executeQuery() {
     const client = opencode.client;
 
     // Check if session exists, create if not
-    let actualSessionId = sessionId;
-    try {
-      const existingSession = await client.session.get({ path: { id: sessionId } });
-      if (existingSession.data) {
-        actualSessionId = existingSession.data.id;
-      }
-    } catch {
-      // Session doesn't exist, create it
-      const newSession = await client.session.create({
-        body: { title: sessionId },
-      });
-      if (newSession.data) {
-        actualSessionId = newSession.data.id;
-      }
+    const existingSession = await client.session.get({ path: { id: sessionId } });
+    if (!existingSession.data) {
+      console.log(`Session ${sessionId} does not exist, creating...`);
+      await createSessionWithId(sessionId);
+    } else { 
+    console.log(`Session ${sessionId} already exists`);
     }
+
 
     // Subscribe to events and stream them as JSONL
     const eventPromise = (async () => {
@@ -105,10 +100,10 @@ async function executeQuery() {
 
     // authenticate 
     await client.auth.set({
-      path : { id : "zen"}, 
-      body : {
-        type : "api", 
-        key : process.env.OPENCODE_API_KEY || "", 
+      path: { id: "zen" },
+      body: {
+        type: "api",
+        key: process.env.OPENCODE_API_KEY || "",
       }
 
 
@@ -117,11 +112,13 @@ async function executeQuery() {
 
     // Send the prompt
     await client.session.prompt({
-      path: { id: actualSessionId },
+      path: { id: sessionId },
       body: {
         model: { providerID, modelID },
         parts: [{ type: "text", text: prompt }],
+
       },
+
     });
 
     // Wait for event stream to complete
@@ -177,3 +174,36 @@ process.on("SIGTERM", () => {
 
 // Execute
 executeQuery();
+
+
+
+// Helper to create a session 
+
+
+async function createSessionWithId(sessionId: string) {
+
+  const sessionFileContents = `
+{
+  "info": {
+    "id": "${sessionId}",
+    "version": "1.0.120",
+    "projectID": "global",
+    "directory": "${_cwd}",
+    "title": "Greeting and quick check-in",
+    "time": {
+      "created": ${Date.now()},
+      "updated": ${Date.now()}
+    },
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    }
+  },
+  messages : []
+}
+  `
+  await writeFile(`/tmp/${sessionId}.json`, sessionFileContents);
+  await exec(`opencode import /tmp/${sessionId}.json`)
+
+}
