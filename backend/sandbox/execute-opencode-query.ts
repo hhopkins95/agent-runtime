@@ -218,7 +218,21 @@ async function createSessionWithId(sessionId: string) {
 }
   `
   await writeFile(`/tmp/${sessionId}.json`, sessionFileContents);
-  await execAsync(`opencode import /tmp/${sessionId}.json`);
+  console.log(`Session file written to /tmp/${sessionId}.json`);
+
+  console.log(`Running: opencode import /tmp/${sessionId}.json`);
+  try {
+    const { stdout, stderr } = await execAsync(`opencode import /tmp/${sessionId}.json`);
+    console.log(`opencode import stdout: ${stdout}`);
+    if (stderr) {
+      console.log(`opencode import stderr: ${stderr}`);
+    }
+  } catch (error: any) {
+    console.log(`opencode import failed with error: ${error.message}`);
+    if (error.stdout) console.log(`stdout: ${error.stdout}`);
+    if (error.stderr) console.log(`stderr: ${error.stderr}`);
+    throw error;
+  }
 
   console.log(`Session ${sessionId} created`);
 }
