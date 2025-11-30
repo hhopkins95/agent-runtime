@@ -213,16 +213,34 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
   }> {
     const result = await this.sandbox.exec(['opencode', 'export', this.sessionId]);
     const exitCode = await result.wait();
-    const stdout = await result.stdout.getReader().read()
+
+    // Read ALL chunks from stdout (not just first 8KB)
+    const stdoutReader = result.stdout.getReader();
+    let stdout = '';
+    while (true) {
+      const { done, value } = await stdoutReader.read();
+      if (done) break;
+      stdout += value;
+    }
+    stdoutReader.releaseLock();
 
     if (exitCode !== 0) {
-      const stderr = await result.stderr.getReader().read();
+      // Also read all stderr chunks
+      const stderrReader = result.stderr.getReader();
+      let stderr = '';
+      while (true) {
+        const { done, value } = await stderrReader.read();
+        if (done) break;
+        stderr += value;
+      }
+      stderrReader.releaseLock();
+
       logger.error({ exitCode, stderr, sessionId: this.sessionId }, 'OpenCode export command failed');
       return { main: null, subagents: [] };
     }
 
     return {
-      main: stdout.value || null,
+      main: stdout || null,
       subagents: [],
     };
   }
