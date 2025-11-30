@@ -7,7 +7,7 @@ import { parseOpencodeStreamEvent } from "../src/lib/agent-architectures/opencod
 const scriptPath = path.join(import.meta.dirname, '..', 'sandbox', 'execute-opencode-query.ts')
 const sessionId = 'ses_52f1258d7ffev7nAoAJy2cUTAA'
 const prompt = 'Hello, how are you?'
-const model = 'opencode/gemini-3-pro'
+const model = 'opencode/big-pickle'
 const cwd = import.meta.dirname
 
 const executeQuery = async () => {
