@@ -24,6 +24,9 @@ import { createOpencode } from "@opencode-ai/sdk";
 import { exec } from "child_process";
 import { Command } from "commander";
 import { writeFile } from "fs/promises";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 // Configure commander program
 const program = new Command()
@@ -82,6 +85,7 @@ async function executeQuery() {
     if (!existingSession.data) {
       console.log(`Session ${sessionId} does not exist, creating...`);
       await createSessionWithId(sessionId);
+      console.log(`Session ${sessionId} created!`);
     } else { 
     console.log(`Session ${sessionId} already exists`);
     }
@@ -129,9 +133,11 @@ async function executeQuery() {
 
     });
 
+
     // Wait for event stream to complete
     await eventPromise;
 
+    console.log(`Event stream completed`);
     // Close server and exit
     server?.close();
     process.exit(0);
@@ -212,7 +218,7 @@ async function createSessionWithId(sessionId: string) {
 }
   `
   await writeFile(`/tmp/${sessionId}.json`, sessionFileContents);
-  await exec(`opencode import /tmp/${sessionId}.json`)
+  await execAsync(`opencode import /tmp/${sessionId}.json`);
 
   console.log(`Session ${sessionId} created`);
 }
