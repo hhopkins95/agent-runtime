@@ -185,7 +185,9 @@ export class ModalSandbox implements SandboxPrimitive {
 
         let args = ['npx', 'chokidar-cli', `${watchPath}/**/*`, '--polling'];
         if (opts?.ignorePatterns) {
-            args.push('--ignore', opts.ignorePatterns.join(','));
+            for (const pattern of opts.ignorePatterns) {
+                args.push('-i', `"${pattern}"`);
+            }
         }
 
         // Use chokidar-cli with polling for container compatibility

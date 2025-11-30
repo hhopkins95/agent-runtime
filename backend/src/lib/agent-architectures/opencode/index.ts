@@ -318,7 +318,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
         content: event.content,
       });
     }, {
-      ignorePatterns : ['.opencode/**/*'],
+      ignorePatterns: ['**/.opencode/**'],
     });
   }
 
