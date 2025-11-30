@@ -7,7 +7,7 @@ import { logger } from "../src/config/logger"
 
 // Variables
 const scriptPath = path.join(import.meta.dirname, '..', 'sandbox', 'execute-opencode-query.ts')
-const sessionId = 'ses_52f1258d7ffev7nAoAJy2cUTAB'
+const sessionId = 'ses_52f1258d7ffev7nAoAJy2cUTAC'
 const prompt = 'Hello, how are you?'
 const model = 'opencode/big-pickle'
 const cwd = import.meta.dirname

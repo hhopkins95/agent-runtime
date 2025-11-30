@@ -22,8 +22,11 @@
 
 import { createOpencode } from "@opencode-ai/sdk";
 import { exec } from "child_process";
+import os from "os";
 import { Command } from "commander";
-import { writeFile } from "fs/promises";
+import { existsSync, unlink } from "fs";
+import { readFile, writeFile } from "fs/promises";
+import path from "path";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
@@ -203,7 +206,7 @@ async function createSessionWithId(sessionId: string) {
     "version": "1.0.120",
     "projectID": "global",
     "directory": "${_cwd}",
-    "title": "Greeting and quick check-in",
+    "title": "New Session",
     "time": {
       "created": ${Date.now()},
       "updated": ${Date.now()}
@@ -214,25 +217,29 @@ async function createSessionWithId(sessionId: string) {
       "files": 0
     }
   },
-  messages : []
+  "messages" : []
 }
   `
-  await writeFile(`/tmp/${sessionId}.json`, sessionFileContents);
-  console.log(`Session file written to /tmp/${sessionId}.json`);
 
-  console.log(`Running: opencode import /tmp/${sessionId}.json`);
+  const filePath = path.join(os.tmpdir(), `temp-${sessionId}.json`);
+  await writeFile(filePath, sessionFileContents);
+
+  // Verify file exists
+  if (!existsSync(filePath)) {
+    throw new Error(`File was not created at ${filePath}`);
+  }
+
   try {
-    const { stdout, stderr } = await execAsync(`opencode import /tmp/${sessionId}.json`);
-    console.log(`opencode import stdout: ${stdout}`);
-    if (stderr) {
-      console.log(`opencode import stderr: ${stderr}`);
-    }
+    await execAsync(`opencode import "${filePath}"`);
   } catch (error: any) {
-    console.log(`opencode import failed with error: ${error.message}`);
-    if (error.stdout) console.log(`stdout: ${error.stdout}`);
-    if (error.stderr) console.log(`stderr: ${error.stderr}`);
     throw error;
   }
 
-  console.log(`Session ${sessionId} created`);
+
+  // Remove the temporary file
+  await unlink(filePath, (err) => {
+    if (err) {
+      console.log(`Failed to remove temporary file: ${err.message}`);
+    }
+  });
 }
