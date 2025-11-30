@@ -54,6 +54,18 @@ const executeQuery = async () => {
     }
 
     console.log(`Processed ${messageCount} events`)
+
+    // Wait for process to fully exit
+    await new Promise<void>((resolve, reject) => {
+        child.on('close', (code) => {
+            if (code === 0) {
+                resolve()
+            } else {
+                reject(new Error(`Process exited with code ${code}`))
+            }
+        })
+        child.on('error', reject)
+    })
 }
 
 executeQuery()

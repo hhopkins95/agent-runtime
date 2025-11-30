@@ -94,6 +94,11 @@ async function executeQuery() {
         if (process.stdout.write("")) {
           // Write succeeded
         }
+
+        // Break when session goes idle (processing complete)
+        if (event.type === 'session.idle' && event.properties.sessionID === sessionId) {
+          break;
+        }
       }
     })();
 
