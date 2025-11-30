@@ -230,8 +230,10 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     };
   }
 
-  public async *executeQuery(args: { query: string }): AsyncGenerator<StreamEvent> {
-    const command = ['tsx', '/app/execute-opencode-query.ts', args.query, '--session-id', this.sessionId, '--model', 'opencode/gemini-3-pro'];
+  public async *executeQuery(args: { query: string, options? : OpenCodeSessionOptions }): AsyncGenerator<StreamEvent> {
+
+    const model = args.options?.model || 'opencode/gemini-3-pro';
+    const command = ['tsx', '/app/execute-opencode-query.ts', args.query, '--session-id', this.sessionId, '--model', model];
 
     logger.debug({ command }, 'Executing OpenCode command');
 
