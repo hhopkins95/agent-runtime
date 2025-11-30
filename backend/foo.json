@@ -1,0 +1,20 @@
+{
+  "info": {
+    "id": "ses_52f1258d7ffev7nAoAJy2cUTAA",
+    "version": "1.0.120",
+    "projectID": "global",
+    "directory": "/Users/hunterhopkins/dev/projects/agent-service",
+    "title": "Greeting and quick check-in",
+    "time": {
+      "created": 1764441827112,
+      "updated": 1764441912997
+    },
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    }
+  },
+  "messages": []
+}
+

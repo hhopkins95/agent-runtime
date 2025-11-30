@@ -206,4 +206,5 @@ async function createSessionWithId(sessionId: string) {
   await writeFile(`/tmp/${sessionId}.json`, sessionFileContents);
   await exec(`opencode import /tmp/${sessionId}.json`)
 
+  console.log(`Session ${sessionId} created`);
 }
