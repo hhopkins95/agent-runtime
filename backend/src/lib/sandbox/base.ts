@@ -68,6 +68,8 @@ export interface SandboxPrimitive {
      * @param path - Directory path to watch
      * @param callback - Function called for each file change event
      */
-    watch : (path: string, callback: (event: WatchEvent) => void) => Promise<void>,
+    watch : (path: string, callback: (event: WatchEvent) => void, opts? : {
+        ignorePatterns? : string[],
+    }) => Promise<void>,
 
 }

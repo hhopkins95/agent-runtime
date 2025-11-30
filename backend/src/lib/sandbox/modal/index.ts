@@ -180,12 +180,17 @@ export class ModalSandbox implements SandboxPrimitive {
      * Callback is invoked for each file change event.
      * Cleanup is automatic on terminate().
      */
-    async watch(watchPath: string, callback: (event: WatchEvent) => void): Promise<void> {
+    async watch(watchPath: string, callback: (event: WatchEvent) => void, opts?: { ignorePatterns?: string[] }): Promise<void> {
+
+
+        let args = ['npx', 'chokidar-cli', `${watchPath}/**/*`, '--polling'];
+        if (opts?.ignorePatterns) {
+            args.push('--ignore', opts.ignorePatterns.join(','));
+        }
+
         // Use chokidar-cli with polling for container compatibility
         // Output format: "event:path" (e.g., "add:/workspace/file.txt")
-        const watcherProcess = await this.sandbox.exec([
-            'npx', 'chokidar-cli', `${watchPath}/**/*`, '--polling'
-        ]);
+        const watcherProcess = await this.sandbox.exec(args);
 
         logger.info({ watchPath }, 'File watcher started');
 

@@ -158,12 +158,10 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
         path: `${paths.AGENT_PROFILE_DIR}/opencode.json`,
         content: JSON.stringify(
           {
-            provider: 'anthropic',
-            model: 'claude-sonnet-4-5',
             permission: {
               bash: 'allow', // Non-interactive mode
               edit: 'allow',
-              external_directory: false,
+              external_directory: 'deny',
             },
             ...(plugins.length > 0 && { plugin: plugins }),
             ...(mcpConfig && { mcp: mcpConfig }),
@@ -230,7 +228,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
   }
 
   public async *executeQuery(args: { query: string }): AsyncGenerator<StreamEvent> {
-    const command = ['tsx', '/app/execute-opencode-query.ts', args.query, '--session-id', this.sessionId];
+    const command = ['tsx', '/app/execute-opencode-query.ts', args.query, '--session-id', this.sessionId, '--model', 'opencode/gemini-3-pro'];
 
     logger.debug({ command }, 'Executing OpenCode command');
 
@@ -319,6 +317,8 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
         path: event.path,
         content: event.content,
       });
+    }, {
+      ignorePatterns : ['.opencode/**/*'],
     });
   }
 
