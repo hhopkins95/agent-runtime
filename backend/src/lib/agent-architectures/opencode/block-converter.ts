@@ -274,9 +274,18 @@ function extractSubagentBlock(part: Part & { type: 'tool' }): SubagentBlock | nu
 // ============================================================================
 
 /**
- * Track active blocks for determining if events are starts or updates
+ * State for tracking active blocks
  */
-const activeBlocks = new Map<string, boolean>();
+interface ActiveBlockState {
+  block: ConversationBlock;
+  conversationId: string;
+  accumulatedContent: string; // For text/reasoning blocks
+}
+
+/**
+ * Track active blocks with their state for determining if events are starts or updates
+ */
+const activeBlocks = new Map<string, ActiveBlockState>();
 
 /**
  * Parse a message.part.updated event
@@ -293,13 +302,33 @@ function parsePartUpdatedEvent(
   const isNewBlock = !activeBlocks.has(part.id);
 
   if (isNewBlock) {
-    // Mark block as active
-    activeBlocks.set(part.id, true);
+    // Before adding a new block, complete any active text/reasoning blocks
+    // This handles the case where one text block ends and another begins
+    for (const [blockId, state] of activeBlocks) {
+      if (state.block.type === 'assistant_text' || state.block.type === 'thinking') {
+        events.push({
+          type: 'block_complete',
+          blockId,
+          conversationId: state.conversationId,
+          block: {
+            ...state.block,
+            content: state.accumulatedContent,
+          } as ConversationBlock,
+        });
+        activeBlocks.delete(blockId);
+      }
+    }
 
     // Handle task tools specially for subagent blocks
     if (isTaskTool(part)) {
       const subagentBlock = extractSubagentBlock(part as any);
       if (subagentBlock) {
+        // Track task tools in activeBlocks (without content accumulation)
+        activeBlocks.set(part.id, {
+          block: subagentBlock,
+          conversationId,
+          accumulatedContent: '',
+        });
         events.push({
           type: 'block_start',
           block: subagentBlock,
@@ -312,6 +341,12 @@ function parsePartUpdatedEvent(
     // Create block_start event
     const incompleteBlock = partToIncompleteBlock(part);
     if (incompleteBlock) {
+      // Track the block with its state
+      activeBlocks.set(part.id, {
+        block: incompleteBlock,
+        conversationId,
+        accumulatedContent: '',
+      });
       events.push({
         type: 'block_start',
         block: incompleteBlock,
@@ -322,6 +357,12 @@ function parsePartUpdatedEvent(
 
   // Handle text delta for streaming content
   if (delta && (part.type === 'text' || part.type === 'reasoning')) {
+    // Accumulate the content for later completion
+    const activeState = activeBlocks.get(part.id);
+    if (activeState) {
+      activeState.accumulatedContent += delta;
+    }
+
     events.push({
       type: 'text_delta',
       blockId: part.id,
@@ -350,6 +391,15 @@ function parsePartUpdatedEvent(
     if (state.status === 'completed' || state.status === 'error') {
       // Mark block as inactive
       activeBlocks.delete(part.id);
+
+      // Debug logging for tool output
+      logger.info({
+        toolName: part.tool,
+        hasOutput: !!state.output,
+        outputType: typeof state.output,
+        hasError: !!state.error,
+        status: state.status,
+      }, 'Tool completed - debugging output');
 
       // Emit tool result as block_complete
       const resultBlock: ConversationBlock = {
@@ -425,15 +475,28 @@ function parseSessionIdleEvent(
 ): StreamEvent[] {
   const { sessionID } = event.properties;
   const conversationId = sessionID === mainSessionId ? 'main' : sessionID;
+  const events: StreamEvent[] = [];
 
-  // Clear active blocks for this session
-  for (const [blockId, _] of activeBlocks) {
-    if (blockId.includes(sessionID)) {
-      activeBlocks.delete(blockId);
+  // Complete all pending text/reasoning blocks before clearing
+  for (const [blockId, state] of activeBlocks) {
+    if (state.block.type === 'assistant_text' || state.block.type === 'thinking') {
+      events.push({
+        type: 'block_complete',
+        blockId,
+        conversationId: state.conversationId,
+        block: {
+          ...state.block,
+          content: state.accumulatedContent,
+        } as ConversationBlock,
+      });
     }
   }
 
-  return [{
+  // Clear all active blocks
+  activeBlocks.clear();
+
+  // Emit session_end system block
+  events.push({
     type: 'block_complete',
     blockId: generateId(),
     conversationId,
@@ -447,7 +510,9 @@ function parseSessionIdleEvent(
         sessionId: sessionID,
       },
     },
-  }];
+  });
+
+  return events;
 }
 
 // ============================================================================
