@@ -2,10 +2,12 @@ import { spawn } from "child_process"
 import path from "path"
 import { streamJSONL } from "../src/lib/helpers/stream"
 import { parseOpencodeStreamEvent } from "../src/lib/agent-architectures/opencode/block-converter"
+import { logger } from "../src/config/logger"
+
 
 // Variables
 const scriptPath = path.join(import.meta.dirname, '..', 'sandbox', 'execute-opencode-query.ts')
-const sessionId = 'ses_52f1258d7ffev7nAoAJy2cUTAA'
+const sessionId = 'ses_52f1258d7ffev7nAoAJy2cUTAB'
 const prompt = 'Hello, how are you?'
 const model = 'opencode/big-pickle'
 const cwd = import.meta.dirname
@@ -43,7 +45,7 @@ const executeQuery = async () => {
     // Stream JSONL messages and convert to StreamEvents
     let messageCount = 0
 
-    for await (const opencodeEvent of streamJSONL<any>(stdout, 'opencode-sdk')) {
+    for await (const opencodeEvent of streamJSONL<any>(stdout, 'opencode-sdk', logger)) {
         messageCount++
 
         // Convert SDK message to StreamEvents and yield each one
@@ -67,5 +69,8 @@ const executeQuery = async () => {
         child.on('error', reject)
     })
 }
+
+
+
 
 executeQuery()

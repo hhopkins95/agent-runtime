@@ -74,8 +74,11 @@ async function executeQuery() {
     server = opencode.server;
     const client = opencode.client;
 
+    console.log(`Client created`);
+
     // Check if session exists, create if not
     const existingSession = await client.session.get({ path: { id: sessionId } });
+    console.log(`Existing session: ${JSON.stringify(existingSession)}`);
     if (!existingSession.data) {
       console.log(`Session ${sessionId} does not exist, creating...`);
       await createSessionWithId(sessionId);
