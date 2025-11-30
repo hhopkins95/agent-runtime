@@ -18,6 +18,7 @@ import { ConversationBlock } from '../../../types/session/blocks.js';
 import { logger } from '../../../config/logger.js';
 import { randomUUID } from 'crypto';
 import { parseOpenCodeTranscriptFile } from './opencode-transcript-parser.js';
+import { readStreamToString } from '../../helpers/stream.js';
 import { streamJSONL } from '../../helpers/stream.js';
 import { Event as OpenCodeEvent } from '@opencode-ai/sdk';
 import { parseOpencodeStreamEvent } from './block-converter.js';
@@ -214,27 +215,11 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     const result = await this.sandbox.exec(['opencode', 'export', this.sessionId]);
     const exitCode = await result.wait();
 
-    // Read ALL chunks from stdout (not just first 8KB)
-    const stdoutReader = result.stdout.getReader();
-    let stdout = '';
-    while (true) {
-      const { done, value } = await stdoutReader.read();
-      if (done) break;
-      stdout += value;
-    }
-    stdoutReader.releaseLock();
+    // Read all stdout content using universal stream helper
+    const stdout = await readStreamToString(result.stdout);
 
     if (exitCode !== 0) {
-      // Also read all stderr chunks
-      const stderrReader = result.stderr.getReader();
-      let stderr = '';
-      while (true) {
-        const { done, value } = await stderrReader.read();
-        if (done) break;
-        stderr += value;
-      }
-      stderrReader.releaseLock();
-
+      const stderr = await readStreamToString(result.stderr);
       logger.error({ exitCode, stderr, sessionId: this.sessionId }, 'OpenCode export command failed');
       return { main: null, subagents: [] };
     }
