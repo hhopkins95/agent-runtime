@@ -121,17 +121,17 @@ export interface RuntimeSessionData extends SessionListItem {
 // Legacy Type Aliases (for backward compatibility during migration)
 // =============================================================================
 
-/**
- * @deprecated Use PersistedSessionListData instead
- */
-export type SessionListData = PersistedSessionListData;
+// /**
+//  * @deprecated Use PersistedSessionListData instead
+//  */
+// export type SessionListData = PersistedSessionListData;
 
-/**
- * @deprecated Use PersistedSessionData instead
- */
-export type SavedSessionData = PersistedSessionData;
+// /**
+//  * @deprecated Use PersistedSessionData instead
+//  */
+// export type SavedSessionData = PersistedSessionData;
 
-/**
- * @deprecated Status is now derived from runtime state (SessionRuntimeState)
- */
-export type SessionStatus = "pending" | "active" | "inactive" | "completed" | "failed" | 'building-sandbox';
+// /**
+//  * @deprecated Status is now derived from runtime state (SessionRuntimeState)
+//  */
+// export type SessionStatus = "pending" | "active" | "inactive" | "completed" | "failed" | 'building-sandbox';

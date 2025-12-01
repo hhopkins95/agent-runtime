@@ -36,10 +36,6 @@ export type {
   SessionListItem,
   PersistedSessionListData,
   PersistedSessionData,
-  // Legacy types (deprecated)
-  SessionStatus,
-  SessionListData,
-  SavedSessionData,
 } from './session';
 
 // ============================================================================
