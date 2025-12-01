@@ -26,6 +26,7 @@ import type {
   AGENT_ARCHITECTURE_TYPE,
   SessionRuntimeState,
   SandboxStatus,
+  CreateSessionArgs,
 } from '../types/session/index.js';
 import type { ConversationBlock } from '../types/session/blocks.js';
 import type { EventBus } from './event-bus.js';
@@ -85,40 +86,60 @@ export class AgentSession {
   static async create(
     input: {
       sessionId: string
-    } | {
-      agentProfileRef: string,
-      sessionOptions: AgentArchitectureSessionOptions,
-      architecture: AGENT_ARCHITECTURE_TYPE
-    },
+    } | CreateSessionArgs,
     modalContext: ModalContext,
     eventBus: EventBus,
     persistenceAdapter: PersistenceAdapter,
     onSandboxTerminated?: OnSandboxTerminatedCallback,
   ): Promise<AgentSession> {
 
-    let session: AgentSession;
-    let sessionInput: { newSessionId: string; architecture: AGENT_ARCHITECTURE_TYPE, sessionOptions?: AgentArchitectureSessionOptions } | { savedSessionData: PersistedSessionData };
-
+    // Load existing session from 
     if ('sessionId' in input) {
       // Load existing session from persistence
       const sessionData = await persistenceAdapter.loadSession(input.sessionId);
+
       if (!sessionData) {
         throw new Error(`Session ${input.sessionId} not found in persistence`);
       }
 
       const agentProfile = await persistenceAdapter.loadAgentProfile(sessionData.agentProfileReference);
+
       if (!agentProfile) {
         throw new Error(`Agent profile ${sessionData.agentProfileReference} not found in persistence`);
       }
 
-      sessionInput = { savedSessionData: sessionData };
-      session = new AgentSession({
+
+      let blocks: ConversationBlock[] = []
+      let subagents: { id: string; blocks: ConversationBlock[], rawTranscript?: string }[] = []
+      if (sessionData.rawTranscript) {
+        // parse the saved transcripts into initial block state
+        const parsedBlocks = parseTranscripts(sessionData.type, sessionData.rawTranscript);
+        blocks = parsedBlocks.blocks;
+
+        if (sessionData.subagents?.length && sessionData.subagents.length >  0) { 
+          subagents = sessionData.subagents.map(subagent => ({
+            id: subagent.id,
+            blocks: parseTranscripts(sessionData.type, subagent.rawTranscript ?? '').blocks,
+            rawTranscript: subagent.rawTranscript,
+          }));
+        }
+
+      }
+
+      return new AgentSession({
         modalContext,
         eventBus,
         persistenceAdapter,
         agentProfile,
-        session: sessionInput,
         onSandboxTerminated,
+        architecture: sessionData.type,
+        sessionId: sessionData.sessionId,
+        blocks,
+        subagents,
+        workspaceFiles: sessionData.workspaceFiles,
+        sessionOptions: sessionData.sessionOptions,
+        createdAt: sessionData.createdAt,
+        rawTranscript: sessionData.rawTranscript,
       });
     } else {
       // Create a new session
@@ -128,20 +149,37 @@ export class AgentSession {
         throw new Error(`Agent profile ${input.agentProfileRef} not found in persistence`);
       }
 
-      sessionInput = { newSessionId: newSessionId, architecture: input.architecture, sessionOptions: input.sessionOptions };
-      session = new AgentSession({
+      const session = new AgentSession({
         modalContext,
         eventBus,
         persistenceAdapter,
         agentProfile,
-        session: sessionInput,
         onSandboxTerminated,
+        architecture: input.architecture,
+        sessionId: newSessionId,
+        blocks: [],
+        subagents: [],
+        workspaceFiles: [ ...(agentProfile.defaultWorkspaceFiles ?? []), ...(input.defaultWorkspaceFiles ?? [])],
+        sessionOptions: input.sessionOptions,
+        createdAt: Date.now(),
+        rawTranscript: undefined,
       });
-    }
 
-    // Initialize session (parses transcripts, NO sandbox creation)
-    await session.initialize(sessionInput);
-    return session;
+      // create a new session record in persistence 
+      await persistenceAdapter.createSessionRecord({
+        sessionId : newSessionId,
+        agentProfileReference : input.agentProfileRef,
+        type : input.architecture,
+        createdAt : Date.now(),
+        sessionOptions : input.sessionOptions,
+      })
+
+
+      // persist the full session state (will persist any default workspace files)
+      await session.persistFullSessionState();
+
+      return session;
+    }
   }
 
   private constructor(
@@ -150,14 +188,18 @@ export class AgentSession {
       eventBus: EventBus,
       persistenceAdapter: PersistenceAdapter,
       agentProfile: AgentProfile,
-      session: {
-        newSessionId: string,
-        architecture: AGENT_ARCHITECTURE_TYPE, 
-        sessionOptions?: AgentArchitectureSessionOptions,
-      } | {
-        savedSessionData: PersistedSessionData,
-      },
       onSandboxTerminated?: OnSandboxTerminatedCallback,
+
+      // Session Data 
+      architecture: AGENT_ARCHITECTURE_TYPE,
+      sessionId: string,
+      blocks: ConversationBlock[],
+      subagents: { id: string; blocks: ConversationBlock[], rawTranscript?: string }[],
+      workspaceFiles: WorkspaceFile[],
+      sessionOptions?: AgentArchitectureSessionOptions,
+      createdAt?: number,
+      rawTranscript?: string
+
     }
   ) {
     this.modalContext = props.modalContext;
@@ -166,63 +208,43 @@ export class AgentSession {
     this.agentProfile = props.agentProfile;
     this.onSandboxTerminated = props.onSandboxTerminated;
 
-    // Get architecture from session data
-    if ('newSessionId' in props.session) {
-      this.architecture = props.session.architecture;
-      this.sessionId = props.session.newSessionId;
-      this.createdAt = Date.now();
-      this.blocks = [];
-      this.subagents = [];
-      this.workspaceFiles = [];
-      this.sessionOptions = props.session.sessionOptions;
-    } else {
-      this.architecture = props.session.savedSessionData.type;
-      this.sessionId = props.session.savedSessionData.sessionId;
-      this.createdAt = props.session.savedSessionData.createdAt;
-      this.rawTranscript = props.session.savedSessionData.rawTranscript;
-      this.workspaceFiles = props.session.savedSessionData.workspaceFiles;
-      this.blocks = []; // Will be parsed in initialize()
-      this.sessionOptions = props.session.savedSessionData.sessionOptions;
-      this.subagents = props.session.savedSessionData.subagents?.map(subagent => ({
-        id: subagent.id,
-        blocks: [],
-        rawTranscript: subagent.rawTranscript,
-      })) ?? [];
-    }
+
+    this.architecture = props.architecture;
+    this.sessionId = props.sessionId;
+    this.blocks = props.blocks;
+    this.subagents = props.subagents;
+    this.workspaceFiles = props.workspaceFiles;
+    this.sessionOptions = props.sessionOptions;
+    this.createdAt = props.createdAt;
+    this.rawTranscript = props.rawTranscript;
+
+    // // Get architecture from session data
+    // if ('newSessionId' in props.session) {
+
+    //   this.architecture = props.session.args.architecture;
+    //   this.sessionId = props.session.newSessionId;
+    //   this.createdAt = Date.now();
+    //   this.blocks = [];
+    //   this.subagents = [];
+    //   this.workspaceFiles = [...(props.session.args.defaultWorkspaceFiles ?? []), ...(this.agentProfile.defaultWorkspaceFiles ?? [])];
+    //   this.sessionOptions = props.session.args.sessionOptions;
+
+    // } else {
+    //   this.architecture = props.session.savedSessionData.type;
+    //   this.sessionId = props.session.savedSessionData.sessionId;
+    //   this.createdAt = props.session.savedSessionData.createdAt;
+    //   this.rawTranscript = props.session.savedSessionData.rawTranscript;
+    //   this.workspaceFiles = props.session.savedSessionData.workspaceFiles;
+    //   this.blocks = []; // Will be parsed in initialize()
+    //   this.sessionOptions = props.session.savedSessionData.sessionOptions;
+    //   this.subagents = props.session.savedSessionData.subagents?.map(subagent => ({
+    //     id: subagent.id,
+    //     blocks: [],
+    //     rawTranscript: subagent.rawTranscript,
+    //   })) ?? [];
+    // }
 
     this.lastActivity = Date.now();
-  }
-
-  /**
-   * Initialize the session - parses transcripts using static parser
-   * Does NOT create sandbox - that's done lazily in sendMessage()
-   */
-  private async initialize(session: {
-    newSessionId: string,
-    architecture: AGENT_ARCHITECTURE_TYPE
-  } | {
-    savedSessionData: PersistedSessionData,
-  }): Promise<void> {
-
-    // For existing sessions, parse blocks using static parser (no sandbox needed)
-    if ('savedSessionData' in session && session.savedSessionData.rawTranscript) {
-      const subagentTranscripts = this.subagents.map(s => ({
-        id: s.id,
-        transcript: s.rawTranscript ?? '',
-      }));
-      const parsed = parseTranscripts(this.architecture, session.savedSessionData.rawTranscript, subagentTranscripts);
-      this.blocks = parsed.blocks;
-      this.subagents = parsed.subagents.map(sub => ({
-        id: sub.id,
-        blocks: sub.blocks,
-        rawTranscript: this.subagents.find(s => s.id === sub.id)?.rawTranscript,
-      }));
-    }
-
-    // Emit initial status (loaded but no sandbox)
-    this.emitRuntimeStatus();
-
-    logger.info({ sessionId: this.sessionId }, 'Session initialized (no sandbox yet)');
   }
 
   /**

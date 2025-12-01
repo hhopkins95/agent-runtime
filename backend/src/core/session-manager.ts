@@ -113,14 +113,6 @@ export class SessionManager {
       // Add to loaded sessions
       this.loadedSessions.set(session.sessionId, session);
 
-      // Persist session record
-      await this.adapters.persistence.createSessionRecord(session.getPersistedListData());
-
-      logger.info(
-        { sessionId: session.sessionId, loadedCount: this.loadedSessions.size },
-        'Session created successfully'
-      );
-
       // Emit domain events
       this.eventBus.emit('sessions:changed');
 

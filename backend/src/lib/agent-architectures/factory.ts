@@ -21,13 +21,13 @@ export const getAgentArchitectureAdapter = (architecture : AGENT_ARCHITECTURE_TY
 export const parseTranscripts = (
     architecture: AGENT_ARCHITECTURE_TYPE,
     rawTranscript: string,
-    subagents: { id: string; transcript: string }[]
+    subagents?: { id: string; transcript: string }[]
 ): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } => {
     switch (architecture) {
         case "claude-agent-sdk":
-            return ClaudeSDKAdapter.parseTranscripts(rawTranscript, subagents);
+            return ClaudeSDKAdapter.parseTranscripts(rawTranscript, subagents ?? []);
         case "opencode":
-            return OpenCodeAdapter.parseTranscripts(rawTranscript, subagents);
+            return OpenCodeAdapter.parseTranscripts(rawTranscript, subagents ?? []);
     }
 }
 
