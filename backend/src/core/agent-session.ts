@@ -48,7 +48,7 @@ export class AgentSession {
 
   // Sandbox infrastructure (lazy - created on first sendMessage)
   private sandboxPrimitive?: SandboxPrimitive;
-  private adapter?: AgentArchitectureAdapter;
+  private architectureAdapter?: AgentArchitectureAdapter;
   private sandboxId?: string;
   private sandboxStatus: SandboxStatus | null = null;
   private statusMessage?: string;
@@ -247,7 +247,7 @@ export class AgentSession {
     this.sandboxId = this.sandboxPrimitive.getId();
 
     // Step 2: Create the architecture adapter
-    this.adapter = getAgentArchitectureAdapter(this.architecture, this.sandboxPrimitive, this.sessionId);
+    this.architectureAdapter = getAgentArchitectureAdapter(this.architecture, this.sandboxPrimitive, this.sessionId);
 
     // Step 3: Setup session files
     this.emitRuntimeStatus("Setting up session files...");
@@ -272,14 +272,14 @@ export class AgentSession {
    * Setup session files in the sandbox (transcripts, profile, workspace files)
    */
   private async setupSessionFiles(): Promise<void> {
-    if (!this.adapter || !this.sandboxPrimitive) {
+    if (!this.architectureAdapter || !this.sandboxPrimitive) {
       throw new Error('Cannot setup session files without adapter and sandbox');
     }
 
     // Run all file setup operations in parallel for better performance
     await Promise.all([
       // Setup transcripts
-      this.adapter.setupSessionTranscripts({
+      this.architectureAdapter.setupSessionTranscripts({
         sessionId: this.sessionId,
         mainTranscript: this.rawTranscript ?? '',
         subagents: this.subagents.map(s => ({
@@ -288,7 +288,7 @@ export class AgentSession {
         })),
       }),
       // Setup agent profile
-      this.adapter.setupAgentProfile({
+      this.architectureAdapter.setupAgentProfile({
         agentProfile: this.agentProfile,
       }),
       // Setup workspace files
@@ -325,7 +325,7 @@ export class AgentSession {
    * Start file watchers for workspace and transcript directories
    */
   private async startWatchers(): Promise<void> {
-    if (!this.adapter) {
+    if (!this.architectureAdapter) {
       throw new Error('Cannot start watchers without adapter');
     }
 
@@ -333,10 +333,10 @@ export class AgentSession {
 
     // Start both watchers using adapter methods and wait for them to be ready
     await Promise.all([
-      this.adapter.watchWorkspaceFiles((event) => {
+      this.architectureAdapter.watchWorkspaceFiles((event) => {
         this.handleWorkspaceFileChange(event);
       }),
-      this.adapter.watchSessionTranscriptChanges((event) => {
+      this.architectureAdapter.watchSessionTranscriptChanges((event) => {
         this.handleTranscriptChange(event);
       }),
     ]);
@@ -387,7 +387,7 @@ export class AgentSession {
    * Handle transcript change events from adapter (already interpreted as main or subagent)
    */
   private handleTranscriptChange(event: TranscriptChangeEvent): void {
-    if (!this.adapter) return;
+    if (!this.architectureAdapter) return;
 
     if (event.type === 'main') {
       logger.debug({
@@ -404,7 +404,7 @@ export class AgentSession {
         id: s.id,
         transcript: s.rawTranscript ?? '',
       }));
-      const parsed = this.adapter.parseTranscripts(event.content, subagentTranscripts);
+      const parsed = this.architectureAdapter.parseTranscripts(event.content, subagentTranscripts);
       this.blocks = parsed.blocks;
       // Update subagent blocks (keep rawTranscripts, update blocks)
       this.subagents = parsed.subagents.map(sub => ({
@@ -451,7 +451,7 @@ export class AgentSession {
         id: s.id,
         transcript: s.rawTranscript ?? '',
       }));
-      const parsed = this.adapter.parseTranscripts(this.rawTranscript ?? '', subagentTranscripts);
+      const parsed = this.architectureAdapter.parseTranscripts(this.rawTranscript ?? '', subagentTranscripts);
       this.subagents = parsed.subagents.map(sub => ({
         id: sub.id,
         blocks: sub.blocks,
@@ -532,7 +532,7 @@ export class AgentSession {
         'Sending message to agent...'
       );
 
-      for await (const event of this.adapter!.executeQuery({ query: message, options: this.sessionOptions })) {
+      for await (const event of this.architectureAdapter!.executeQuery({ query: message, options: this.sessionOptions })) {
         switch (event.type) {
           case 'block_start':
             this.eventBus.emit('session:block:start', {
@@ -597,13 +597,13 @@ export class AgentSession {
   }
 
   private async syncSessionStateWithSandbox(): Promise<void> {
-    if (!this.sandboxPrimitive || !this.adapter) {
+    if (!this.sandboxPrimitive || !this.architectureAdapter) {
       // No sandbox, nothing to sync from
       return;
     }
 
     // Read raw transcripts from sandbox
-    const transcripts = await this.adapter.readSessionTranscripts({});
+    const transcripts = await this.architectureAdapter.readSessionTranscripts({});
 
     // Read workspace files from sandbox
     const basePaths = this.sandboxPrimitive.getBasePaths();
@@ -627,7 +627,7 @@ export class AgentSession {
     this.rawTranscript = transcripts.main ?? undefined;
 
     // Parse blocks using adapter
-    const parsed = this.adapter.parseTranscripts(transcripts.main ?? '', transcripts.subagents);
+    const parsed = this.architectureAdapter.parseTranscripts(transcripts.main ?? '', transcripts.subagents);
     this.blocks = parsed.blocks;
     this.subagents = parsed.subagents.map(sub => ({
       id: sub.id,
@@ -687,7 +687,7 @@ export class AgentSession {
         await this.syncSessionStateToStorage();
         await this.sandboxPrimitive.terminate();
         this.sandboxPrimitive = undefined;
-        this.adapter = undefined;
+        this.architectureAdapter = undefined;
       }
 
       logger.info({ sessionId: this.sessionId }, 'Session destroyed');
