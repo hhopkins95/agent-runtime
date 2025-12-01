@@ -20,6 +20,7 @@ import { SandboxPrimitive } from '../../sandbox/base.js';
 import { AgentArchitectureAdapter, TranscriptChangeEvent, WorkspaceFileEvent } from '../base.js';
 import { parseOpencodeStreamEvent } from './block-converter.js';
 import { parseOpenCodeTranscriptFile } from './opencode-transcript-parser.js';
+import { WorkspaceFile } from '../../../types/session/index.js';
 
 
 export interface OpenCodeSessionOptions {
@@ -50,6 +51,17 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
       AGENT_MD_FILE: `/workspace/.opencode/AGENTS.md`,
     };
   }
+
+
+  public async initializeSession(args: {
+    sessionId: string,
+    sessionTranscript: string | undefined,
+    agentProfile: AgentProfile,
+    workspaceFiles: WorkspaceFile[]
+  }): Promise<void> {
+    throw new Error('Not implemented');
+  }
+
 
   public async setupAgentProfile(args: { agentProfile: AgentProfile }): Promise<void> {
     const paths = this.getPaths();
@@ -206,9 +218,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     await this.sandbox.exec(['opencode', 'session', 'import', filePath]);
   }
 
-  public async readSessionTranscript(_args: {}): Promise<{
-    main: string | null;
-  }> {
+  public async readSessionTranscript(): Promise<string | null> {
     const result = await this.sandbox.exec(['opencode', 'export', this.sessionId]);
     const exitCode = await result.wait();
 
@@ -221,10 +231,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
       return null;
     }
 
-    return {
-      main: stdout || null,
-      subagents: [],
-    };
+    return stdout || null;
   }
 
   public async *executeQuery(args: { query: string, options? : OpenCodeSessionOptions }): AsyncGenerator<StreamEvent> {
@@ -274,9 +281,9 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     }
 
     // emit a transcript change event
-    const newTranscript = await this.readSessionTranscript({})
-    if (newTranscript.main) {
-      this.emitTranscriptChange({ type: 'main', content: newTranscript.main });
+    const newTranscript = await this.readSessionTranscript()
+    if (newTranscript) {
+      this.emitTranscriptChange({ content: newTranscript });
     }
 
     logger.info({ sessionId: this.sessionId, messageCount }, 'OpenCode SDK query completed');
