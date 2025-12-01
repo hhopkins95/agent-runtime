@@ -51,19 +51,14 @@ export interface AgentArchitectureAdapter<ArchitectureSessionOptions extends Rec
 
 export interface AgentArchitectureStaticMethods {
     /**
-     * Parse raw transcript / session json into our conversation blocks
-     * 
-     * @param rawTranscript 
-     * @param subagents 
-     * @returns 
+     * Parse transcript into conversation blocks.
+     * For Claude SDK: expects combined JSON format { main: string, subagents: [...] }
+     * For OpenCode: expects native JSON format
      */
-    parseTranscripts : (rawTranscript : string, subagents : {id : string, transcript : string}[]) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}
-
+    parseTranscript : (rawTranscript : string) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}
 
     /**
      * Create a new session id with the proper formatting for this architecture
-     * 
-     * @returns A new session id
      */
     createSessionId : () => string
 }

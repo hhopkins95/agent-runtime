@@ -7,7 +7,7 @@ import { StreamEvent } from "../../../types/session/streamEvents.js";
 import { SandboxPrimitive } from "../../sandbox/base.js";
 import { ConversationBlock } from "../../../types/session/blocks.js";
 import { parseClaudeTranscriptFile } from "./claude-transcript-parser.js";
-import { sdkMessageToBlocks, extractToolResultBlocks, parseStreamEvent, convertMessagesToBlocks } from "./block-converter.js";
+import { parseStreamEvent, convertMessagesToBlocks } from "./block-converter.js";
 import { logger } from "../../../config/logger.js";
 import { streamJSONL } from "../../helpers/stream.js";
 import { randomUUID } from "crypto";
@@ -276,10 +276,6 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
     public async* executeQuery(args: {query: string, options? : ClaudeSDKSessionOptions}): AsyncGenerator<StreamEvent> {
         try {
-            let time = Date.now();
-
-
-
             // Build command arguments
             const command = ['tsx', '/app/execute-claude-sdk-query.ts', args.query, '--session-id', this.sessionId];
 
@@ -350,13 +346,17 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         }
     }
 
-    public static parseTranscripts(rawTranscript: string, subagents: {id: string, transcript: string}[]): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
+    /**
+     * Parse raw JSONL transcripts into blocks.
+     * This is the internal parsing logic - use parseTranscript() for the public API.
+     */
+    private static parseRawTranscripts(mainJsonl: string, subagentJsonls: {id: string, transcript: string}[]): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
         // Parse main transcript
-        const mainMessages = rawTranscript ? parseClaudeTranscriptFile(rawTranscript) : [];
+        const mainMessages = mainJsonl ? parseClaudeTranscriptFile(mainJsonl) : [];
         const mainBlocks = convertMessagesToBlocks(mainMessages);
 
         // Parse subagent transcripts
-        const subagentBlocks = subagents.map((subagent) => {
+        const subagentBlocks = subagentJsonls.map((subagent) => {
             const messages = subagent.transcript ? parseClaudeTranscriptFile(subagent.transcript) : [];
             const blocks = convertMessagesToBlocks(messages);
             return {
@@ -375,20 +375,30 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         };
     }
 
-    public parseTranscript(rawTranscript: string): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
-        // Parse the combined JSON format
-        if (!rawTranscript) {
+    /**
+     * Parse a combined transcript (JSON format) into blocks.
+     * Static method for use without an adapter instance (e.g., on session load).
+     */
+    public static parseTranscript(combinedTranscript: string): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
+        if (!combinedTranscript) {
             return { blocks: [], subagents: [] };
         }
 
         try {
-            const combined: CombinedClaudeTranscript = JSON.parse(rawTranscript);
-            return ClaudeSDKAdapter.parseTranscripts(combined.main, combined.subagents);
+            const combined: CombinedClaudeTranscript = JSON.parse(combinedTranscript);
+            return ClaudeSDKAdapter.parseRawTranscripts(combined.main, combined.subagents);
         } catch (error) {
-            // If parsing fails, try treating it as raw JSONL (backwards compatibility / edge case)
+            // If parsing fails, try treating it as raw JSONL (backwards compatibility)
             logger.warn({ error }, 'Failed to parse as CombinedClaudeTranscript, falling back to raw JSONL');
-            return ClaudeSDKAdapter.parseTranscripts(rawTranscript, []);
+            return ClaudeSDKAdapter.parseRawTranscripts(combinedTranscript, []);
         }
+    }
+
+    /**
+     * Instance method that delegates to static parseTranscript
+     */
+    public parseTranscript(rawTranscript: string): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
+        return ClaudeSDKAdapter.parseTranscript(rawTranscript);
     }
 
     public async watchWorkspaceFiles(callback: (event: WorkspaceFileEvent) => void): Promise<void> {

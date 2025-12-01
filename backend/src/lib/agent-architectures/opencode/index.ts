@@ -208,7 +208,6 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
 
   public async readSessionTranscript(_args: {}): Promise<{
     main: string | null;
-    subagents: { id: string; transcript: string }[];
   }> {
     const result = await this.sandbox.exec(['opencode', 'export', this.sessionId]);
     const exitCode = await result.wait();
@@ -219,7 +218,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     if (exitCode !== 0) {
       const stderr = await readStreamToString(result.stderr);
       logger.error({ exitCode, stderr, sessionId: this.sessionId }, 'OpenCode export command failed');
-      return { main: null, subagents: [] };
+      return null;
     }
 
     return {
@@ -287,8 +286,8 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
   }
 
 
-  public parseTranscript(rawTranscript: string, subagents: { id: string; transcript: string }[]): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
-    return OpenCodeAdapter.parseTranscripts(rawTranscript, subagents);
+  public parseTranscript(rawTranscript: string): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
+    return OpenCodeAdapter.parseTranscript(rawTranscript);
   }
 
   // Static methods
@@ -299,16 +298,12 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     return `ses_${timeBytes}_${random}`;
   }
 
-  public static parseTranscripts(
-    rawTranscript: string,
-    subagents: { id: string; transcript: string }[]
-  ): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
+  public static parseTranscript(rawTranscript: string): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
     if (!rawTranscript) {
       return { blocks: [], subagents: [] };
     }
 
-    return parseOpenCodeTranscriptFile(rawTranscript)
-
+    return parseOpenCodeTranscriptFile(rawTranscript);
   }
 
   public async watchWorkspaceFiles(callback: (event: WorkspaceFileEvent) => void): Promise<void> {
