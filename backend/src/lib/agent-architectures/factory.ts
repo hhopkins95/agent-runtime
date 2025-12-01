@@ -1,5 +1,4 @@
 import { ClaudeSDKAdapter } from "./claude-sdk";
-import { GeminiCLIAdapter } from "./gemini-cli";
 import { OpenCodeAdapter } from "./opencode";
 import { AGENT_ARCHITECTURE_TYPE } from "../../types/session/index";
 import { AgentArchitectureAdapter } from "./base";
@@ -10,8 +9,6 @@ export const getAgentArchitectureAdapter = (architecture : AGENT_ARCHITECTURE_TY
     switch (architecture) {
         case "claude-agent-sdk":
             return new ClaudeSDKAdapter(sandbox, sessionId) 
-        case "gemini-cli":
-            return new GeminiCLIAdapter(sandbox, sessionId);
         case "opencode":
             return new OpenCodeAdapter(sandbox, sessionId);
     }
@@ -29,8 +26,6 @@ export const parseTranscripts = (
     switch (architecture) {
         case "claude-agent-sdk":
             return ClaudeSDKAdapter.parseTranscripts(rawTranscript, subagents);
-        case "gemini-cli":
-            throw new Error("Gemini CLI parsing is not supported yet");
         case "opencode":
             return OpenCodeAdapter.parseTranscripts(rawTranscript, subagents);
     }
@@ -40,8 +35,6 @@ export const createSessionId = (architecture: AGENT_ARCHITECTURE_TYPE) => {
     switch (architecture) {
         case "claude-agent-sdk":
             return ClaudeSDKAdapter.createSessionId();
-        case "gemini-cli":
-            throw new Error("Gemini CLI session id creation is not supported yet");
         case "opencode":
             return OpenCodeAdapter.createSessionId();
     }

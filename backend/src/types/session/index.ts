@@ -1,7 +1,7 @@
 import { AgentArchitectureSessionOptions } from "../../lib/agent-architectures/base";
 import type { ConversationBlock } from "./blocks";
 
-export type AGENT_ARCHITECTURE_TYPE = "claude-agent-sdk" | "gemini-cli" | "opencode"
+export type AGENT_ARCHITECTURE_TYPE = "claude-agent-sdk"  | "opencode"
 
 /**
  * A file in the workspace during the session

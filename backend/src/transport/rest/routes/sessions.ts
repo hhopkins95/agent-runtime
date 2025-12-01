@@ -23,7 +23,7 @@ export function createSessionRoutes(
       "json",
       z.object({
         agentProfileRef: z.string(),
-        architecture: z.enum(["claude-agent-sdk", "gemini-cli", "opencode"]),
+        architecture: z.enum(["claude-agent-sdk",  "opencode"]),
         sessionOptions: z.record(z.unknown()).optional(),
       })
     ),
