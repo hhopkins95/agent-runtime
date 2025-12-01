@@ -10,14 +10,32 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { ClaudeSDKAdapter } from '../index.js';
+import { ClaudeSDKAdapter, CombinedClaudeTranscript } from '../index.js';
 import type { ConversationBlock } from '../../../../types/session/blocks.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const EXAMPLE_TRANSCRIPTS_DIR = path.join(__dirname, '..', 'example-transcripts');
+
+const EXAMPLE_MAIN_TRANSCRIPT = fs.readFileSync(path.join(EXAMPLE_TRANSCRIPTS_DIR, 'c06ae941-1674-4e9c-b2a1-ab54bb020454.jsonl'), 'utf-8');
+const EXAMPLE_SUBAGENT_TRANSCRIPT = fs.readFileSync(path.join(EXAMPLE_TRANSCRIPTS_DIR, 'agent-40dad41d.jsonl'), 'utf-8');
+
 const OUTPUT_DIR = path.join(__dirname, 'output');
+
+
+const exampleCombined : CombinedClaudeTranscript = {
+  main : EXAMPLE_MAIN_TRANSCRIPT,
+  subagents : [
+    {
+      id : '40dad41d', 
+      transcript : EXAMPLE_SUBAGENT_TRANSCRIPT,
+    }
+  ]
+}
+
+
+
 
 function countBlocksByType(blocks: ConversationBlock[]): Record<string, number> {
   const counts: Record<string, number> = {};
@@ -35,51 +53,13 @@ async function main() {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   }
 
-  // Read all .jsonl files from example-transcripts
-  const files = fs.readdirSync(EXAMPLE_TRANSCRIPTS_DIR)
-    .filter(f => f.endsWith('.jsonl'));
-
-  console.log(`Found ${files.length} transcript files:\n`);
-  files.forEach(f => console.log(`  - ${f}`));
-  console.log();
-
-  // Separate main transcript from subagent transcripts
-  let mainTranscript = '';
-  let mainFileName = '';
-  const subagents: { id: string; transcript: string }[] = [];
-
-  for (const file of files) {
-    const filePath = path.join(EXAMPLE_TRANSCRIPTS_DIR, file);
-    const content = fs.readFileSync(filePath, 'utf-8');
-
-    if (file.startsWith('agent-')) {
-      // Subagent transcript
-      const id = file.replace('.jsonl', '');
-      subagents.push({ id, transcript: content });
-    } else {
-      // Main transcript
-      mainTranscript = content;
-      mainFileName = file;
-    }
-  }
-
-  console.log(`Main transcript: ${mainFileName}`);
-  console.log(`Subagent transcripts: ${subagents.length}`);
-  subagents.forEach(s => console.log(`  - ${s.id}`));
-  console.log();
-
-  // Parse transcripts using the static method
-  console.log('Parsing transcripts...\n');
-
-  let result: ReturnType<typeof ClaudeSDKAdapter.parseTranscripts>;
-  let parseError: Error | null = null;
+  let result : ReturnType<typeof ClaudeSDKAdapter.parseTranscript>;
 
   try {
-    result = ClaudeSDKAdapter.parseTranscripts(mainTranscript, subagents);
+    result = ClaudeSDKAdapter.parseTranscript(JSON.stringify(exampleCombined));
   } catch (error) {
-    parseError = error as Error;
-    console.error('ERROR: Failed to parse transcripts:', parseError.message);
-    result = { blocks: [], subagents: [] };
+    console.error('ERROR: Failed to parse transcripts:', error);
+    throw error 
   }
 
   // Calculate statistics
@@ -93,7 +73,6 @@ async function main() {
     totalSubagentBlocks: allSubagentBlocks.length,
     mainBlocksByType,
     subagentBlocksByType,
-    parseError: parseError?.message || null,
   };
 
   // Log summary
@@ -115,13 +94,6 @@ async function main() {
       console.log(`    ${type}: ${count}`);
     }
   }
-
-  if (parseError) {
-    console.log(`\nParse error: ${parseError.message}`);
-  } else {
-    console.log('\nNo parsing errors detected.');
-  }
-
   // Write output
   const output = {
     blocks: result.blocks,
