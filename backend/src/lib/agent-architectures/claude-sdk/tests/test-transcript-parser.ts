@@ -18,8 +18,10 @@ const __dirname = path.dirname(__filename);
 
 const EXAMPLE_TRANSCRIPTS_DIR = path.join(__dirname, '..', 'example-transcripts');
 
-const EXAMPLE_MAIN_TRANSCRIPT = fs.readFileSync(path.join(EXAMPLE_TRANSCRIPTS_DIR, 'c06ae941-1674-4e9c-b2a1-ab54bb020454.jsonl'), 'utf-8');
-const EXAMPLE_SUBAGENT_TRANSCRIPT = fs.readFileSync(path.join(EXAMPLE_TRANSCRIPTS_DIR, 'agent-40dad41d.jsonl'), 'utf-8');
+
+// src/lib/agent-architectures/claude-sdk/example-transcripts/0bfd826f-14ed-4e00-8015-75bf5f7fe33f.jsonl
+const EXAMPLE_MAIN_TRANSCRIPT = fs.readFileSync(path.join(EXAMPLE_TRANSCRIPTS_DIR, '0bfd826f-14ed-4e00-8015-75bf5f7fe33f.jsonl'), 'utf-8');
+const EXAMPLE_SUBAGENT_TRANSCRIPT = fs.readFileSync(path.join(EXAMPLE_TRANSCRIPTS_DIR, 'agent-6d933f1b.jsonl'), 'utf-8');
 
 const OUTPUT_DIR = path.join(__dirname, 'output');
 
@@ -28,7 +30,7 @@ const exampleCombined : CombinedClaudeTranscript = {
   main : EXAMPLE_MAIN_TRANSCRIPT,
   subagents : [
     {
-      id : '40dad41d', 
+      id : '6d933f1b', 
       transcript : EXAMPLE_SUBAGENT_TRANSCRIPT,
     }
   ]
