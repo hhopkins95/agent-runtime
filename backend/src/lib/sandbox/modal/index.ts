@@ -6,6 +6,8 @@ import { ModalContext } from "./client";
 import { createModalSandbox } from "./create-sandbox";
 import { AGENT_ARCHITECTURE_TYPE } from "../../../types/session/index";
 import { logger } from "../../../config/logger";
+import { copyLocalFilesToSandbox } from "../../helpers/copy-local-files-to-sandbox";
+import path from "path";
 
 
 export class ModalSandbox implements SandboxPrimitive {
@@ -17,7 +19,16 @@ export class ModalSandbox implements SandboxPrimitive {
 
         const sandbox = await createModalSandbox(modalContext, agentProfile);
 
-        return new ModalSandbox(sandbox);
+        const sandboxPrimitive = new ModalSandbox(sandbox);
+
+        // copy the app dir to the sandbox
+        await copyLocalFilesToSandbox({
+            localDirPath: path.join(__dirname, "../../../../sandbox"),
+            targetSandboxDirPath: sandboxPrimitive.getBasePaths().APP_DIR,
+            sandbox: sandboxPrimitive,
+        });
+
+        return sandboxPrimitive;
 
     }
 

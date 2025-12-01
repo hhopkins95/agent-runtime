@@ -9,7 +9,7 @@ import {logger} from "../../config/logger"
  *
  * @returns Array of dockerfile commands
  */
-export function buildSandboxImageCommands({
+export function generateSandboxAppInstallCommands({
     localDirPath, 
     targetSandboxDirPath
 } : { 
@@ -60,3 +60,16 @@ export function buildSandboxImageCommands({
   return commands;
 }
 
+
+export function generateCopyFileCommands({
+  localFilePath,
+  targetSandboxFilePath
+} : {
+  localFilePath : string,
+  targetSandboxFilePath : string
+}): string[] {
+  const commands: string[] = [];
+
+  
+  return commands;
+}
