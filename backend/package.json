@@ -65,11 +65,13 @@
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "socket.io": "^4.8.1",
+    "tar-stream": "^3.1.7",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@google/gemini-cli-core": "^0.16.0",
     "@types/node": "^24.1.0",
+    "@types/tar-stream": "^3.1.4",
     "@typescript-eslint/eslint-plugin": "^6.7.0",
     "@typescript-eslint/parser": "^6.7.0",
     "eslint": "^8.49.0",
