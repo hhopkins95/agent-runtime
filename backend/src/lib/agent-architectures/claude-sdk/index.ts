@@ -39,6 +39,8 @@ const getPaths = () => {
 
 export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessionOptions> {
 
+    private transcriptUpdateCallback? : (event : TranscriptChangeEvent) => void
+
     public static createSessionId(): string { return randomUUID() }
 
     public constructor(
@@ -47,34 +49,13 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
     ) { }
 
 
-
-    private identifySessionTranscriptFile(args: { fileName: string, content: string }): { isMain: true } | { subagentId: string } | null {
-        // Claude SDK transcript files:
-        // - Main session: {sessionId}.jsonl
-        // - Subagents: agent-{uuid}.jsonl
-
-        // Only handle .jsonl files
-        if (!args.fileName.endsWith('.jsonl')) {
-            return null;
-        }
-
-        // Check if it's a subagent file
-        if (args.fileName.startsWith('agent-')) {
-            const subagentId = args.fileName.replace('.jsonl', '');
-            return { subagentId };
-        }
-
-        // Otherwise, it's a main transcript file
-        return { isMain: true };
-    }
-
     public async initializeSession(args: {
         sessionId: string,
         sessionTranscript: string | undefined,
         agentProfile: AgentProfile,
         workspaceFiles: WorkspaceFile[]
     }): Promise<void> {
-        const paths = this.getPaths();
+        const paths = getPaths();
 
         logger.info({ sessionId: args.sessionId, profileId: args.agentProfile.id }, 'Initializing session');
 
@@ -102,17 +83,12 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
                 // Subagent transcripts
                 for (const subagent of combined.subagents) {
                     transcriptFiles.push({
-                        path: `${paths.AGENT_STORAGE_DIR}/${subagent.id}.jsonl`,
+                        path: `${paths.AGENT_STORAGE_DIR}/agent-${subagent.id}.jsonl`,
                         content: subagent.transcript
                     });
                 }
             } catch (error) {
                 logger.warn({ error }, 'Failed to parse sessionTranscript as CombinedClaudeTranscript, treating as raw JSONL');
-                // Fallback: treat as raw JSONL for main transcript only
-                transcriptFiles.push({
-                    path: `${paths.AGENT_STORAGE_DIR}/${args.sessionId}.jsonl`,
-                    content: args.sessionTranscript
-                });
             }
         }
 
@@ -220,8 +196,8 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
     }
 
     public async readSessionTranscript(): Promise<string | null> {
-        const paths = this.getPaths();
-        const mainTranscriptPath = `${paths.AGENT_STORAGE_DIR}/${this.sessionId}.jsonl`;
+        const storageDirPath = this.sandbox.getBasePaths().HOME_DIR + "/.claude/projects/-workspace"
+        const mainTranscriptPath = `${storageDirPath}/${this.sessionId}.jsonl`;
 
         try {
             // Read main transcript
@@ -232,7 +208,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
             }
 
             // List all files in storage directory (pattern to find agent-*.jsonl)
-            const files = await this.sandbox.listFiles(paths.AGENT_STORAGE_DIR, 'agent-*.jsonl');
+            const files = await this.sandbox.listFiles(storageDirPath, 'agent-*.jsonl');
 
             // Read all subagent transcripts
             const subagents: { id: string, transcript: string }[] = [];
@@ -251,7 +227,10 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
                     continue;
                 }
 
-                subagents.push({ id: subagentId, transcript });
+                if (transcript.includes(this.sessionId)) {
+                    // make sure the base session id is somewhere in the path -- ensures that this subagent is a subagent of the proper session
+                    subagents.push({ id: subagentId, transcript });
+                }
             }
 
             // Combine into our unified format
@@ -333,14 +312,16 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
                 throw new Error(`Claude SDK failed with no output. Stderr: ${stderrLines.join('\n')}`);
             }
 
+            this.sendTranscriptToSession()
+
             logger.info({ sessionId: this.sessionId, messageCount }, 'Claude SDK query completed');
         } catch (error) {
             logger.error({ error, sessionId: this.sessionId }, 'Error during SDK execution');
             throw error;
         }
     }
-    
-    
+
+
     /**
      * Parse a combined transcript (JSON format) into blocks.
      * Static method for use without an adapter instance (e.g., on session load).
@@ -353,22 +334,22 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
             const combined: CombinedClaudeTranscript = JSON.parse(combinedTranscript);
 
             const mainBlocks = convertMessagesToBlocks(parseClaudeTranscriptFile(combined.main))
-            const subagentBlocks = combined.subagents.map(raw =>({
-                id : raw.id, 
-                blocks : convertMessagesToBlocks(parseClaudeTranscriptFile(raw.transcript))
+            const subagentBlocks = combined.subagents.map(raw => ({
+                id: raw.id,
+                blocks: convertMessagesToBlocks(parseClaudeTranscriptFile(raw.transcript))
             })).filter(subagent => subagent.blocks.length > 1) // Filter out the default random subagents that claude creates on startup
 
             return {
-                blocks : mainBlocks, 
-                subagents : subagentBlocks
+                blocks: mainBlocks,
+                subagents: subagentBlocks
             }
 
         } catch (error) {
             // If parsing fails, try treating it as raw JSONL (backwards compatibility)
             logger.warn({ error }, 'Failed to parse as CombinedClaudeTranscript, falling back to raw JSONL');
-            return { 
-                blocks : [], 
-                subagents : []
+            return {
+                blocks: [],
+                subagents: []
             }
         }
     }
@@ -387,39 +368,30 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
     }
 
     public async watchSessionTranscriptChanges(callback: (event: TranscriptChangeEvent) => void): Promise<void> {
-        const paths = this.getPaths();
-
-        await this.sandbox.watch(paths.AGENT_STORAGE_DIR, async (event) => {
-            // Only process file additions and changes (not unlinks)
-            if (event.type === 'unlink' || !event.content) {
-                return;
-            }
-
-            const fileName = basename(event.path);
-            const identification = this.identifySessionTranscriptFile({ fileName, content: event.content });
-
-            if (!identification) {
-                return;
-            }
-
-            // For subagent files, filter out placeholders
-            if (!('isMain' in identification)) {
-                const lines = event.content.trim().split('\n').filter(l => l.trim().length > 0);
-                if (lines.length <= 1) {
-                    logger.debug({ subagentId: identification.subagentId, lines: lines.length }, 'Skipping placeholder subagent transcript');
-                    return;
-                }
-            }
-
-            // On any transcript change, read all transcripts and emit combined
-            try {
-                const combinedTranscript = await this.readSessionTranscript();
-                if (combinedTranscript) {
-                    callback({ content: combinedTranscript });
-                }
-            } catch (error) {
-                logger.error({ error }, 'Failed to read combined transcript on file change');
-            }
-        });
+        this.transcriptUpdateCallback = callback
+        // Don't watch every update -- probably will be unneccesary updates. Just store callback and wait until session end on execute query
+        // await this.sandbox.watch(paths.AGENT_STORAGE_DIR, async (event) => {
+        //     // On any transcript change, read all transcripts and emit combined
+        //     try {
+        //         const combinedTranscript = await this.readSessionTranscript();
+        //         if (combinedTranscript) {
+        //             callback({ content: combinedTranscript });
+        //         }
+        //     } catch (error) {
+        //         logger.error({ error }, 'Failed to read combined transcript on file change');
+        //     }
+        // });
     }
+
+    private async sendTranscriptToSession() { 
+        if (this.transcriptUpdateCallback) { 
+            const transcript = await this.readSessionTranscript()
+            if (!transcript) return 
+            this.transcriptUpdateCallback({
+                content : transcript
+            })
+        }
+    }
+
+
 }
