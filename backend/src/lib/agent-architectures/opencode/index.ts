@@ -206,7 +206,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     await this.sandbox.exec(['opencode', 'session', 'import', filePath]);
   }
 
-  public async readSessionTranscripts(_args: {}): Promise<{
+  public async readSessionTranscript(_args: {}): Promise<{
     main: string | null;
     subagents: { id: string; transcript: string }[];
   }> {
@@ -275,7 +275,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     }
 
     // emit a transcript change event
-    const newTranscript = await this.readSessionTranscripts({})
+    const newTranscript = await this.readSessionTranscript({})
     if (newTranscript.main) {
       this.emitTranscriptChange({ type: 'main', content: newTranscript.main });
     }
@@ -287,7 +287,7 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
   }
 
 
-  public parseTranscripts(rawTranscript: string, subagents: { id: string; transcript: string }[]): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
+  public parseTranscript(rawTranscript: string, subagents: { id: string; transcript: string }[]): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } {
     return OpenCodeAdapter.parseTranscripts(rawTranscript, subagents);
   }
 

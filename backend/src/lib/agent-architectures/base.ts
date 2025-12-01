@@ -28,22 +28,18 @@ export type TranscriptChangeEvent =
  */
 export interface AgentArchitectureAdapter<ArchitectureSessionOptions extends Record<string, any> = {}>{ 
 
-    getPaths : () => {
-        AGENT_STORAGE_DIR : string, 
-        WORKSPACE_DIR : string, 
-        AGENT_PROFILE_DIR : string,
-        AGENT_MD_FILE : string,
-    }
-
-    setupAgentProfile : (args : {agentProfile : AgentProfile}) => Promise<void>,
-
-    setupSessionTranscripts : (args : {sessionId : string, mainTranscript : string, subagents : {id : string, transcript : string}[]}) => Promise<void>,
-
-    readSessionTranscripts : (args : {}) => Promise<{main : string | null, subagents : {id : string, transcript : string}[]}>,
+    initializeSession : (args : {
+        sessionId : string,
+        sessionTranscript : string | undefined,
+        agentProfile : AgentProfile,
+        workspaceFiles : WorkspaceFile[]
+    }) => Promise<void>,
 
     executeQuery : (args : {query : string, options? : ArchitectureSessionOptions}) => AsyncGenerator<StreamEvent>,
 
-    parseTranscripts : (rawTranscript : string, subagents : {id : string, transcript : string}[]) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}
+    readSessionTranscript : () => Promise<string | null>,
+
+    parseTranscript : (rawTranscript : string) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}
 
     watchWorkspaceFiles: (callback: (event: WorkspaceFileEvent) => void) => Promise<void>;
 
@@ -76,5 +72,6 @@ export interface AgentArchitectureStaticMethods {
 // export the actual session options 
 import { ClaudeSDKSessionOptions } from "./claude-sdk/index";
 import { OpenCodeSessionOptions } from "./opencode/index";
+import { WorkspaceFile } from "../../types";
 export type AgentArchitectureSessionOptions = ClaudeSDKSessionOptions | OpenCodeSessionOptions;
 export type { ClaudeSDKSessionOptions, OpenCodeSessionOptions };

@@ -426,7 +426,7 @@ export class AgentSession {
         id: s.id,
         transcript: s.rawTranscript ?? '',
       }));
-      const parsed = this.architectureAdapter.parseTranscripts(event.content, subagentTranscripts);
+      const parsed = this.architectureAdapter.parseTranscript(event.content, subagentTranscripts);
       this.blocks = parsed.blocks;
       // Update subagent blocks (keep rawTranscripts, update blocks)
       this.subagents = parsed.subagents.map(sub => ({
@@ -473,7 +473,7 @@ export class AgentSession {
         id: s.id,
         transcript: s.rawTranscript ?? '',
       }));
-      const parsed = this.architectureAdapter.parseTranscripts(this.rawTranscript ?? '', subagentTranscripts);
+      const parsed = this.architectureAdapter.parseTranscript(this.rawTranscript ?? '', subagentTranscripts);
       this.subagents = parsed.subagents.map(sub => ({
         id: sub.id,
         blocks: sub.blocks,
@@ -625,7 +625,7 @@ export class AgentSession {
     }
 
     // Read raw transcripts from sandbox
-    const transcripts = await this.architectureAdapter.readSessionTranscripts({});
+    const transcripts = await this.architectureAdapter.readSessionTranscript({});
 
     // Read workspace files from sandbox
     const basePaths = this.sandboxPrimitive.getBasePaths();
@@ -649,7 +649,7 @@ export class AgentSession {
     this.rawTranscript = transcripts.main ?? undefined;
 
     // Parse blocks using adapter
-    const parsed = this.architectureAdapter.parseTranscripts(transcripts.main ?? '', transcripts.subagents);
+    const parsed = this.architectureAdapter.parseTranscript(transcripts.main ?? '', transcripts.subagents);
     this.blocks = parsed.blocks;
     this.subagents = parsed.subagents.map(sub => ({
       id: sub.id,

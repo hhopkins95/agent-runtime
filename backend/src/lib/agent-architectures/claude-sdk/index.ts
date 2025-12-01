@@ -207,7 +207,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         }
     }
 
-    public async readSessionTranscripts(_args: {}): Promise<{main: string | null, subagents: {id: string, transcript: string}[]}> {
+    public async readSessionTranscript(_args: {}): Promise<{main: string | null, subagents: {id: string, transcript: string}[]}> {
         const paths = this.getPaths();
         const mainTranscriptPath = `${paths.AGENT_STORAGE_DIR}/${this.sessionId}.jsonl`;
 
@@ -360,7 +360,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         };
     }
 
-    public parseTranscripts(rawTranscript: string, subagents: {id: string, transcript: string}[]): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
+    public parseTranscript(rawTranscript: string, subagents: {id: string, transcript: string}[]): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
         return ClaudeSDKAdapter.parseTranscripts(rawTranscript, subagents);
     }
 
