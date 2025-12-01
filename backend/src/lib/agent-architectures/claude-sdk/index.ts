@@ -2,6 +2,7 @@ import { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { basename } from "path";
 import { AgentArchitectureAdapter, WorkspaceFileEvent, TranscriptChangeEvent } from "../base.js";
 import { AgentProfile } from "../../../types/agent-profiles.js";
+import { WorkspaceFile } from "../../../types/session/index.js";
 import { StreamEvent } from "../../../types/session/streamEvents.js";
 import { SandboxPrimitive } from "../../sandbox/base.js";
 import { ConversationBlock } from "../../../types/session/blocks.js";
@@ -15,6 +16,16 @@ import { randomUUID } from "crypto";
 
 export interface ClaudeSDKSessionOptions {
     model?: string,
+}
+
+/**
+ * Combined transcript format for Claude SDK.
+ * Wraps the main JSONL + all subagent JSONLs into a single JSON blob.
+ * This is our abstraction layer - Claude natively uses separate files.
+ */
+export interface CombinedClaudeTranscript {
+    main: string;  // raw JSONL
+    subagents: { id: string; transcript: string }[];
 }
 
 
@@ -63,151 +74,158 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         return { isMain: true };
     }
 
-    public async setupAgentProfile(args: {agentProfile: AgentProfile}): Promise<void> {
+    public async initializeSession(args: {
+        sessionId: string,
+        sessionTranscript: string | undefined,
+        agentProfile: AgentProfile,
+        workspaceFiles: WorkspaceFile[]
+    }): Promise<void> {
         const paths = this.getPaths();
-        const profile = args.agentProfile;
 
-        try {
-            logger.info({ profileId: profile.id }, 'Setting up agent profile');
+        logger.info({ sessionId: args.sessionId, profileId: args.agentProfile.id }, 'Initializing session');
 
-            // Collect all files to write in a single batch
-            const filesToWrite: { path: string; content: string }[] = [];
+        // Ensure directories exist
+        await this.sandbox.exec(['mkdir', '-p', paths.AGENT_STORAGE_DIR]);
+        await this.sandbox.exec(['mkdir', '-p', paths.AGENT_PROFILE_DIR]);
 
-            // 1. CLAUDE.md file (main agent instructions)
-            if (profile.agentMDFile) {
-                filesToWrite.push({
-                    path: paths.AGENT_MD_FILE,
-                    content: profile.agentMDFile
+        // Collect all files to write in batches
+        const transcriptFiles: { path: string; content: string }[] = [];
+        const profileFiles: { path: string; content: string }[] = [];
+
+        // --- Transcript files ---
+        if (args.sessionTranscript) {
+            try {
+                const combined: CombinedClaudeTranscript = JSON.parse(args.sessionTranscript);
+
+                // Main transcript
+                if (combined.main) {
+                    transcriptFiles.push({
+                        path: `${paths.AGENT_STORAGE_DIR}/${args.sessionId}.jsonl`,
+                        content: combined.main
+                    });
+                }
+
+                // Subagent transcripts
+                for (const subagent of combined.subagents) {
+                    transcriptFiles.push({
+                        path: `${paths.AGENT_STORAGE_DIR}/${subagent.id}.jsonl`,
+                        content: subagent.transcript
+                    });
+                }
+            } catch (error) {
+                logger.warn({ error }, 'Failed to parse sessionTranscript as CombinedClaudeTranscript, treating as raw JSONL');
+                // Fallback: treat as raw JSONL for main transcript only
+                transcriptFiles.push({
+                    path: `${paths.AGENT_STORAGE_DIR}/${args.sessionId}.jsonl`,
+                    content: args.sessionTranscript
                 });
             }
+        }
 
-            // 2. Subagent definitions
-            if (profile.subagents && profile.subagents.length > 0) {
-                const agentsDir = `${paths.AGENT_PROFILE_DIR}/agents`;
-                for (const subagent of profile.subagents) {
-                    const subagentContent = [
-                        `# ${subagent.name}`,
-                        '',
-                        subagent.description || '',
-                        '',
-                        subagent.prompt,
-                    ].join('\n');
+        // --- Agent profile files ---
+        const profile = args.agentProfile;
 
-                    filesToWrite.push({
-                        path: `${agentsDir}/${subagent.name}.md`,
-                        content: subagentContent
-                    });
-                }
+        // CLAUDE.md file (main agent instructions)
+        if (profile.agentMDFile) {
+            profileFiles.push({
+                path: paths.AGENT_MD_FILE,
+                content: profile.agentMDFile
+            });
+        }
+
+        // Subagent definitions
+        if (profile.subagents && profile.subagents.length > 0) {
+            const agentsDir = `${paths.AGENT_PROFILE_DIR}/agents`;
+            for (const subagent of profile.subagents) {
+                const subagentContent = [
+                    `# ${subagent.name}`,
+                    '',
+                    subagent.description || '',
+                    '',
+                    subagent.prompt,
+                ].join('\n');
+
+                profileFiles.push({
+                    path: `${agentsDir}/${subagent.name}.md`,
+                    content: subagentContent
+                });
             }
+        }
 
-            // 3. Custom commands
-            if (profile.commands && profile.commands.length > 0) {
-                const commandsDir = `${paths.AGENT_PROFILE_DIR}/commands`;
-                for (const command of profile.commands) {
-                    filesToWrite.push({
-                        path: `${commandsDir}/${command.name}.md`,
-                        content: command.prompt
-                    });
-                }
+        // Custom commands
+        if (profile.commands && profile.commands.length > 0) {
+            const commandsDir = `${paths.AGENT_PROFILE_DIR}/commands`;
+            for (const command of profile.commands) {
+                profileFiles.push({
+                    path: `${commandsDir}/${command.name}.md`,
+                    content: command.prompt
+                });
             }
+        }
 
-            // 4. Skills
-            if (profile.skills && profile.skills.length > 0) {
-                const skillsDir = `${paths.AGENT_PROFILE_DIR}/skills`;
-                for (const skill of profile.skills) {
-                    const skillDir = `${skillsDir}/${skill.name}`;
+        // Skills
+        if (profile.skills && profile.skills.length > 0) {
+            const skillsDir = `${paths.AGENT_PROFILE_DIR}/skills`;
+            for (const skill of profile.skills) {
+                const skillDir = `${skillsDir}/${skill.name}`;
 
-                    // Main skill markdown file
-                    const skillContent = [
-                        `# ${skill.name}`,
-                        '',
-                        skill.description || '',
-                        '',
-                        skill.skillMd,
-                    ].join('\n');
+                // Main skill markdown file
+                const skillContent = [
+                    `# ${skill.name}`,
+                    '',
+                    skill.description || '',
+                    '',
+                    skill.skillMd,
+                ].join('\n');
 
-                    filesToWrite.push({
-                        path: `${skillDir}/skill.md`,
-                        content: skillContent
-                    });
+                profileFiles.push({
+                    path: `${skillDir}/skill.md`,
+                    content: skillContent
+                });
 
-                    // Supporting files
-                    if (skill.supportingFiles && skill.supportingFiles.length > 0) {
-                        for (const file of skill.supportingFiles) {
-                            filesToWrite.push({
-                                path: `${skillDir}/${file.relativePath}`,
-                                content: file.content
-                            });
-                        }
+                // Supporting files
+                if (skill.supportingFiles && skill.supportingFiles.length > 0) {
+                    for (const file of skill.supportingFiles) {
+                        profileFiles.push({
+                            path: `${skillDir}/${file.relativePath}`,
+                            content: file.content
+                        });
                     }
                 }
             }
-
-            // Write all files in a single batch operation
-            // Note: defaultWorkspaceFiles are handled separately by setupWorkspaceFiles()
-            if (filesToWrite.length > 0) {
-                logger.debug({ fileCount: filesToWrite.length }, 'Writing agent profile files in batch');
-                const result = await this.sandbox.writeFiles(filesToWrite);
-
-                if (result.failed.length > 0) {
-                    logger.warn({
-                        failed: result.failed,
-                        succeeded: result.success.length
-                    }, 'Some agent profile files failed to write');
-                }
-
-                logger.debug({
-                    succeeded: result.success.length,
-                    failed: result.failed.length
-                }, 'Batch file write complete');
-            }
-
-            logger.info({ profileId: profile.id }, 'Agent profile setup complete');
-        } catch (error) {
-            logger.error({ error, profileId: profile.id }, 'Failed to setup agent profile');
-            throw error;
         }
+
+        // Write all files in parallel batches
+        const writePromises: Promise<any>[] = [];
+
+        if (transcriptFiles.length > 0) {
+            logger.debug({ fileCount: transcriptFiles.length }, 'Writing transcript files');
+            writePromises.push(
+                this.sandbox.writeFiles(transcriptFiles).then(result => {
+                    if (result.failed.length > 0) {
+                        logger.warn({ failed: result.failed }, 'Some transcript files failed to write');
+                    }
+                })
+            );
+        }
+
+        if (profileFiles.length > 0) {
+            logger.debug({ fileCount: profileFiles.length }, 'Writing profile files');
+            writePromises.push(
+                this.sandbox.writeFiles(profileFiles).then(result => {
+                    if (result.failed.length > 0) {
+                        logger.warn({ failed: result.failed }, 'Some profile files failed to write');
+                    }
+                })
+            );
+        }
+
+        await Promise.all(writePromises);
+
+        logger.info({ sessionId: args.sessionId }, 'Session initialization complete');
     }
 
-    public async setupSessionTranscripts(args: {sessionId: string, mainTranscript: string, subagents: {id: string, transcript: string}[]}): Promise<void> {
-        const paths = this.getPaths();
-
-        // Ensure the transcript directory exists (Claude creates it lazily, but we need it for the watcher)
-        await this.sandbox.exec(['mkdir', '-p', paths.AGENT_STORAGE_DIR]);
-
-        // Collect all transcript files to write in a single batch
-        const filesToWrite: { path: string; content: string }[] = [];
-
-        // Main transcript
-        if (args.mainTranscript) {
-            filesToWrite.push({
-                path: `${paths.AGENT_STORAGE_DIR}/${args.sessionId}.jsonl`,
-                content: args.mainTranscript
-            });
-        }
-
-        // Subagent transcripts
-        for (const subagent of args.subagents) {
-            filesToWrite.push({
-                path: `${paths.AGENT_STORAGE_DIR}/${subagent.id}.jsonl`,
-                content: subagent.transcript
-            });
-        }
-
-        // Write all transcripts in a single batch operation
-        if (filesToWrite.length > 0) {
-            const result = await this.sandbox.writeFiles(filesToWrite);
-
-            if (result.failed.length > 0) {
-                logger.warn({
-                    failed: result.failed,
-                    succeeded: result.success.length
-                }, 'Some transcript files failed to write');
-            }
-        }
-    }
-
-    public async readSessionTranscript(_args: {}): Promise<{main: string | null, subagents: {id: string, transcript: string}[]}> {
+    public async readSessionTranscript(): Promise<string | null> {
         const paths = this.getPaths();
         const mainTranscriptPath = `${paths.AGENT_STORAGE_DIR}/${this.sessionId}.jsonl`;
 
@@ -216,10 +234,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
             const mainContent = await this.sandbox.readFile(mainTranscriptPath);
 
             if (!mainContent) {
-                return {
-                    main: null,
-                    subagents: [],
-                };
+                return null;
             }
 
             // List all files in storage directory (pattern to find agent-*.jsonl)
@@ -245,17 +260,17 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
                 subagents.push({ id: subagentId, transcript });
             }
 
-            return {
+            // Combine into our unified format
+            const combined: CombinedClaudeTranscript = {
                 main: mainContent,
                 subagents,
             };
+
+            return JSON.stringify(combined);
         } catch (error) {
             logger.error({ error, sessionId: this.sessionId }, 'Error reading session transcripts');
-            // If main transcript doesn't exist yet, return empty
-            return {
-                main: '',
-                subagents: [],
-            };
+            // If main transcript doesn't exist yet, return null
+            return null;
         }
     }
 
@@ -360,8 +375,20 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         };
     }
 
-    public parseTranscript(rawTranscript: string, subagents: {id: string, transcript: string}[]): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
-        return ClaudeSDKAdapter.parseTranscripts(rawTranscript, subagents);
+    public parseTranscript(rawTranscript: string): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
+        // Parse the combined JSON format
+        if (!rawTranscript) {
+            return { blocks: [], subagents: [] };
+        }
+
+        try {
+            const combined: CombinedClaudeTranscript = JSON.parse(rawTranscript);
+            return ClaudeSDKAdapter.parseTranscripts(combined.main, combined.subagents);
+        } catch (error) {
+            // If parsing fails, try treating it as raw JSONL (backwards compatibility / edge case)
+            logger.warn({ error }, 'Failed to parse as CombinedClaudeTranscript, falling back to raw JSONL');
+            return ClaudeSDKAdapter.parseTranscripts(rawTranscript, []);
+        }
     }
 
     public async watchWorkspaceFiles(callback: (event: WorkspaceFileEvent) => void): Promise<void> {
@@ -379,7 +406,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
     public async watchSessionTranscriptChanges(callback: (event: TranscriptChangeEvent) => void): Promise<void> {
         const paths = this.getPaths();
 
-        await this.sandbox.watch(paths.AGENT_STORAGE_DIR, (event) => {
+        await this.sandbox.watch(paths.AGENT_STORAGE_DIR, async (event) => {
             // Only process file additions and changes (not unlinks)
             if (event.type === 'unlink' || !event.content) {
                 return;
@@ -392,17 +419,23 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
                 return;
             }
 
-            if ('isMain' in identification) {
-                callback({ type: 'main', content: event.content });
-            } else {
-                // Filter out placeholder subagent files
+            // For subagent files, filter out placeholders
+            if (!('isMain' in identification)) {
                 const lines = event.content.trim().split('\n').filter(l => l.trim().length > 0);
                 if (lines.length <= 1) {
                     logger.debug({ subagentId: identification.subagentId, lines: lines.length }, 'Skipping placeholder subagent transcript');
                     return;
                 }
+            }
 
-                callback({ type: 'subagent', subagentId: identification.subagentId, content: event.content });
+            // On any transcript change, read all transcripts and emit combined
+            try {
+                const combinedTranscript = await this.readSessionTranscript();
+                if (combinedTranscript) {
+                    callback({ content: combinedTranscript });
+                }
+            } catch (error) {
+                logger.error({ error }, 'Failed to read combined transcript on file change');
             }
         });
     }

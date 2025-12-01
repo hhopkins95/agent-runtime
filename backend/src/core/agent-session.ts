@@ -62,8 +62,8 @@ export class AgentSession {
 
   // Session data
   private blocks: ConversationBlock[];
-  private rawTranscript?: string;
-  private subagents: { id: string; blocks: ConversationBlock[], rawTranscript?: string }[];
+  private rawTranscript?: string;  // Combined transcript (main + subagents as JSON)
+  private subagents: { id: string; blocks: ConversationBlock[] }[];
   private workspaceFiles: WorkspaceFile[];
   private sessionOptions?: AgentArchitectureSessionOptions;
 
@@ -110,20 +110,12 @@ export class AgentSession {
 
 
       let blocks: ConversationBlock[] = []
-      let subagents: { id: string; blocks: ConversationBlock[], rawTranscript?: string }[] = []
+      let subagents: { id: string; blocks: ConversationBlock[] }[] = []
       if (sessionData.rawTranscript) {
-        // parse the saved transcripts into initial block state
-        const parsedBlocks = parseTranscripts(sessionData.type, sessionData.rawTranscript);
-        blocks = parsedBlocks.blocks;
-
-        if (sessionData.subagents?.length && sessionData.subagents.length >  0) { 
-          subagents = sessionData.subagents.map(subagent => ({
-            id: subagent.id,
-            blocks: parseTranscripts(sessionData.type, subagent.rawTranscript ?? '').blocks,
-            rawTranscript: subagent.rawTranscript,
-          }));
-        }
-
+        // parse the saved combined transcript into blocks + subagents
+        const parsed = parseTranscripts(sessionData.type, sessionData.rawTranscript);
+        blocks = parsed.blocks;
+        subagents = parsed.subagents;
       }
 
       return new AgentSession({
@@ -190,11 +182,11 @@ export class AgentSession {
       agentProfile: AgentProfile,
       onSandboxTerminated?: OnSandboxTerminatedCallback,
 
-      // Session Data 
+      // Session Data
       architecture: AGENT_ARCHITECTURE_TYPE,
       sessionId: string,
       blocks: ConversationBlock[],
-      subagents: { id: string; blocks: ConversationBlock[], rawTranscript?: string }[],
+      subagents: { id: string; blocks: ConversationBlock[] }[],
       workspaceFiles: WorkspaceFile[],
       sessionOptions?: AgentArchitectureSessionOptions,
       createdAt?: number,
@@ -298,24 +290,16 @@ export class AgentSession {
       throw new Error('Cannot setup session files without adapter and sandbox');
     }
 
-    // Run all file setup operations in parallel for better performance
-    await Promise.all([
-      // Setup transcripts
-      this.architectureAdapter.setupSessionTranscripts({
-        sessionId: this.sessionId,
-        mainTranscript: this.rawTranscript ?? '',
-        subagents: this.subagents.map(s => ({
-          id: s.id,
-          transcript: s.rawTranscript ?? '',
-        })),
-      }),
-      // Setup agent profile
-      this.architectureAdapter.setupAgentProfile({
-        agentProfile: this.agentProfile,
-      }),
-      // Setup workspace files
-      this.setupWorkspaceFiles(),
-    ]);
+    // Initialize session with adapter (handles transcripts + agent profile)
+    await this.architectureAdapter.initializeSession({
+      sessionId: this.sessionId,
+      sessionTranscript: this.rawTranscript,
+      agentProfile: this.agentProfile,
+      workspaceFiles: this.workspaceFiles,
+    });
+
+    // Setup workspace files separately
+    await this.setupWorkspaceFiles();
   }
 
   /**
@@ -406,92 +390,38 @@ export class AgentSession {
   }
 
   /**
-   * Handle transcript change events from adapter (already interpreted as main or subagent)
+   * Handle transcript change events from adapter.
+   * Now receives the full combined transcript (main + subagents) on any change.
    */
   private handleTranscriptChange(event: TranscriptChangeEvent): void {
     if (!this.architectureAdapter) return;
 
-    if (event.type === 'main') {
-      logger.debug({
-        sessionId: this.sessionId,
-        type: 'main',
-        contentLength: event.content.length,
-      }, 'Main transcript changed');
+    logger.debug({
+      sessionId: this.sessionId,
+      contentLength: event.content.length,
+    }, 'Transcript changed');
 
-      // Main transcript changed
-      this.rawTranscript = event.content;
+    // Store the combined transcript
+    this.rawTranscript = event.content;
 
-      // Re-parse all transcripts
-      const subagentTranscripts = this.subagents.map(s => ({
-        id: s.id,
-        transcript: s.rawTranscript ?? '',
-      }));
-      const parsed = this.architectureAdapter.parseTranscript(event.content, subagentTranscripts);
-      this.blocks = parsed.blocks;
-      // Update subagent blocks (keep rawTranscripts, update blocks)
-      this.subagents = parsed.subagents.map(sub => ({
-        id: sub.id,
-        blocks: sub.blocks,
-        rawTranscript: this.subagents.find(s => s.id === sub.id)?.rawTranscript,
-      }));
+    // Parse into blocks (adapter handles extracting main + subagents from combined format)
+    const parsed = this.architectureAdapter.parseTranscript(event.content);
+    this.blocks = parsed.blocks;
+    this.subagents = parsed.subagents.map(sub => ({
+      id: sub.id,
+      blocks: sub.blocks,
+    }));
 
-      // Persist immediately
-      this.persistenceAdapter.saveTranscript(this.sessionId, event.content)
-        .then(() => logger.debug({ sessionId: this.sessionId }, 'Persisted main transcript'))
-        .catch(error => logger.error({ error, sessionId: this.sessionId }, 'Failed to persist main transcript'));
+    // Persist immediately
+    this.persistenceAdapter.saveTranscript(this.sessionId, event.content)
+      .then(() => logger.debug({ sessionId: this.sessionId }, 'Persisted transcript'))
+      .catch(error => logger.error({ error, sessionId: this.sessionId }, 'Failed to persist transcript'));
 
-      // Emit for WebSocket clients
-      this.eventBus.emit('session:transcript:changed', {
-        sessionId: this.sessionId,
-        content: event.content,
-      });
-    } else {
-      // Subagent transcript changed
-      const { subagentId, content } = event;
-
-      logger.debug({
-        sessionId: this.sessionId,
-        type: 'subagent',
-        subagentId,
-        contentLength: content.length,
-      }, 'Subagent transcript changed');
-
-      // Update subagent rawTranscript
-      const existingSubagent = this.subagents.find(s => s.id === subagentId);
-      if (existingSubagent) {
-        existingSubagent.rawTranscript = content;
-      } else {
-        this.subagents.push({
-          id: subagentId,
-          blocks: [],
-          rawTranscript: content,
-        });
-      }
-
-      // Re-parse all transcripts to get updated blocks
-      const subagentTranscripts = this.subagents.map(s => ({
-        id: s.id,
-        transcript: s.rawTranscript ?? '',
-      }));
-      const parsed = this.architectureAdapter.parseTranscript(this.rawTranscript ?? '', subagentTranscripts);
-      this.subagents = parsed.subagents.map(sub => ({
-        id: sub.id,
-        blocks: sub.blocks,
-        rawTranscript: this.subagents.find(s => s.id === sub.id)?.rawTranscript,
-      }));
-
-      // Persist immediately
-      this.persistenceAdapter.saveTranscript(this.sessionId, content, subagentId)
-        .then(() => logger.debug({ sessionId: this.sessionId, subagentId }, 'Persisted subagent transcript'))
-        .catch(error => logger.error({ error, sessionId: this.sessionId, subagentId }, 'Failed to persist subagent transcript'));
-
-      // Emit for WebSocket clients
-      this.eventBus.emit('session:subagent:changed', {
-        sessionId: this.sessionId,
-        subagentId,
-        content,
-      });
-    }
+    // Emit for WebSocket clients
+    this.eventBus.emit('session:transcript:changed', {
+      sessionId: this.sessionId,
+      content: event.content,
+    });
   }
 
   /**
@@ -624,8 +554,8 @@ export class AgentSession {
       return;
     }
 
-    // Read raw transcripts from sandbox
-    const transcripts = await this.architectureAdapter.readSessionTranscript({});
+    // Read combined transcript from sandbox
+    const transcript = await this.architectureAdapter.readSessionTranscript();
 
     // Read workspace files from sandbox
     const basePaths = this.sandboxPrimitive.getBasePaths();
@@ -646,26 +576,25 @@ export class AgentSession {
     }));
 
     this.workspaceFiles = workspaceFiles;
-    this.rawTranscript = transcripts.main ?? undefined;
+    this.rawTranscript = transcript ?? undefined;
 
-    // Parse blocks using adapter
-    const parsed = this.architectureAdapter.parseTranscript(transcripts.main ?? '', transcripts.subagents);
-    this.blocks = parsed.blocks;
-    this.subagents = parsed.subagents.map(sub => ({
-      id: sub.id,
-      blocks: sub.blocks,
-      rawTranscript: transcripts.subagents.find(t => t.id === sub.id)?.transcript,
-    }));
+    // Parse blocks using adapter (handles combined format internally)
+    if (transcript) {
+      const parsed = this.architectureAdapter.parseTranscript(transcript);
+      this.blocks = parsed.blocks;
+      this.subagents = parsed.subagents.map(sub => ({
+        id: sub.id,
+        blocks: sub.blocks,
+      }));
+    } else {
+      this.blocks = [];
+      this.subagents = [];
+    }
   }
 
   private async persistFullSessionState(): Promise<void> {
-    // Save all the transcripts
-    await Promise.all([
-      this.persistenceAdapter.saveTranscript(this.sessionId, this.rawTranscript ?? ""),
-      ...this.subagents.map(subagent =>
-        this.persistenceAdapter.saveTranscript(this.sessionId, subagent.rawTranscript ?? "", subagent.id)
-      ),
-    ]);
+    // Save the combined transcript
+    await this.persistenceAdapter.saveTranscript(this.sessionId, this.rawTranscript ?? "");
 
     // Save all the workspace files
     await Promise.all(

@@ -13,11 +13,12 @@ export interface WorkspaceFileEvent {
 }
 
 /**
- * Event emitted when a transcript changes
+ * Event emitted when a transcript changes.
+ * Contains the full combined transcript (main + subagents as a single JSON blob).
  */
-export type TranscriptChangeEvent =
-    | { type: 'main'; content: string }
-    | { type: 'subagent'; subagentId: string; content: string };
+export interface TranscriptChangeEvent {
+    content: string;
+}
 
 /**
  * Base interface that defines how a particular agent architecture manages session files / transformations
