@@ -49,11 +49,13 @@ export function generateSandboxAppInstallCommands({
 
   // If package.json, run npm install 
   if (isPackageJson) {
+    commands.push(`WORKDIR ${targetSandboxDirPath}`);
     commands.push(`RUN npm install`);
   }
 
   // If requirement.txt, run pip install
   if (isRequirementTxt) {
+    commands.push(`WORKDIR ${targetSandboxDirPath}`);
     commands.push(`RUN pip install -r requirement.txt`);
   }
 

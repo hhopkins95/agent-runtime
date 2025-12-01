@@ -8,6 +8,7 @@ import { AGENT_ARCHITECTURE_TYPE } from "../../../types/session/index";
 import { logger } from "../../../config/logger";
 import { copyLocalFilesToSandbox } from "../../helpers/copy-local-files-to-sandbox";
 import path from "path";
+import { normalizeString } from "../../util/normalize-string";
 
 
 export class ModalSandbox implements SandboxPrimitive {
@@ -27,6 +28,17 @@ export class ModalSandbox implements SandboxPrimitive {
             targetSandboxDirPath: sandboxPrimitive.getBasePaths().APP_DIR,
             sandbox: sandboxPrimitive,
         });
+
+        // copy any local mcp files to the sandbox
+        if (agentProfile.bundledMCPs) {
+        for (const localmcp of agentProfile.bundledMCPs) { 
+          const sandboxPath = path.join("/mcps", normalizeString(localmcp.name));
+          await copyLocalFilesToSandbox({
+            localDirPath: localmcp.localProjectPath,
+            targetSandboxDirPath: sandboxPath,
+            sandbox: sandboxPrimitive,
+          });
+        }}
 
         return sandboxPrimitive;
 

@@ -12,83 +12,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { ModalContext } from './client.js';
 import { AgentProfile } from '../../../types/agent-profiles.js';
+import { generateCopyFileCommands, generateSandboxAppInstallCommands } from '../../helpers/generate-docker-commands.js';
+import { normalizeString } from '../../util/normalize-string.js';
 
 // ES module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * Recursively build dockerfile commands to copy sandbox directory into /app
- *
- * Reads all files from apps/agent-service/sandbox/ (except node_modules)
- * and generates RUN commands to recreate them in the Modal image at /app/
- *
- * @returns Array of dockerfile commands
- */
-export function buildSandboxImageCommands(): string[] {
-  const commands: string[] = [];
 
-  // Get the sandbox directory path
-  // From: /path/to/apps/agent-service/src/adapters/modal/sandbox.ts
-  // To:   /path/to/apps/agent-service/sandbox/
-  const sandboxDir = path.resolve(__dirname, '../../../../sandbox');
-
-  if (!fs.existsSync(sandboxDir)) {
-    logger.warn({ sandboxDir }, 'Sandbox directory not found, skipping file copy');
-    return ['RUN mkdir -p /app'];
-  }
-
-  logger.info({ sandboxDir }, 'Building sandbox image commands...');
-
-  // Create /app directory
-  commands.push('RUN mkdir -p /app');
-
-  /**
-   * Recursively process directory and generate commands
-   */
-  function processDirectory(dir: string, relativePath: string = '') {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      const relativeFilePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
-
-      // Skip node_modules directory
-      if (entry.name === 'node_modules') {
-        continue;
-      }
-
-      if (entry.isDirectory()) {
-        // Create directory in image
-        const targetDir = `/app/${relativeFilePath}`;
-        commands.push(`RUN mkdir -p ${targetDir}`);
-
-        // Recursively process subdirectory
-        processDirectory(fullPath, relativeFilePath);
-      } else if (entry.isFile()) {
-        // Read file content
-        const content = fs.readFileSync(fullPath, 'utf-8');
-
-        // Escape content for shell (handle quotes and special chars)
-        // Using base64 encoding to safely transfer content
-        const base64Content = Buffer.from(content).toString('base64');
-        const targetFile = `/app/${relativeFilePath}`;
-
-        // Use base64 decoding to write file (avoids quote escaping issues)
-        commands.push(`RUN echo '${base64Content}' | base64 -d > ${targetFile}`);
-
-        logger.debug({ file: relativeFilePath, size: content.length }, 'Added file to image');
-      }
-    }
-  }
-
-  // Process the sandbox directory
-  processDirectory(sandboxDir);
-
-  logger.info({ commandCount: commands.length }, 'Sandbox image commands built');
-
-  return commands;
-}
+const localSandboxAppDir = path.resolve(__dirname, '../../../../sandbox');
 
 /**
  * Create a new Modal sandbox with standard configuration
@@ -109,8 +41,25 @@ export async function createModalSandbox(
   try {
     logger.info('Creating Modal sandbox with custom image...');
 
+    let customCommands: string[] = [];
+
     // Build dockerfile commands to copy sandbox directory into /app
-    const sandboxCommands = buildSandboxImageCommands();
+    customCommands.push(...generateSandboxAppInstallCommands({
+      localDirPath: localSandboxAppDir,
+      targetSandboxDirPath: "/app",
+    }));
+
+
+    // For each mcp in the agent profile, build the app commands
+    if (agentProfile.bundledMCPs) {
+    for (const localmcp of agentProfile.bundledMCPs) { 
+      const sandboxPath = path.join("/mcps", normalizeString(localmcp.name));
+      customCommands.push(...generateSandboxAppInstallCommands({
+        localDirPath: localmcp.localProjectPath,
+        targetSandboxDirPath: sandboxPath,
+      }));
+    }
+  }
 
     // Build custom image with Node.js 22 and sandbox application
     // This image is cached by Modal and reused across sandboxes
@@ -118,7 +67,7 @@ export async function createModalSandbox(
       .fromRegistry('node:22-slim')
       .dockerfileCommands([
         // Copy all files from sandbox/ to /app/ in image
-        ...sandboxCommands,
+        ...customCommands,
 
         // Install dependencies in /app
         'WORKDIR /app',
@@ -140,11 +89,6 @@ export async function createModalSandbox(
       ])
 
     logger.info('Building/using cached image with Node.js 22 and sandbox application...');
-
-
-    logger.info({
-      claudeCodeCwd: workdir,
-    })
 
     // Create sandbox with configuration
     const sandbox = await modal.sandboxes.create(app, image, {
