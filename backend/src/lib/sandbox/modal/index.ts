@@ -29,11 +29,12 @@ export class ModalSandbox implements SandboxPrimitive {
         
     }
 
-    public getBasePaths(): { APP_DIR: string, WORKSPACE_DIR: string, HOME_DIR: string } {
+    public getBasePaths(): { APP_DIR: string, WORKSPACE_DIR: string, HOME_DIR: string , BUNDLED_MCP_DIR: string } {
         return {
             APP_DIR: "/app",
             WORKSPACE_DIR: "/workspace",
-            HOME_DIR: "/root"
+            HOME_DIR: "/root", 
+            BUNDLED_MCP_DIR: "/mcps"
         };
     }
 

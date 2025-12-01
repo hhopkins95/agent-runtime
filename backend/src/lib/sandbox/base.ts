@@ -31,6 +31,12 @@ export interface SandboxPrimitive {
          * The root home dir where the agent app will store it's app data. (the .claude/ or .gemini/ dirs that have the session transcripts)
          */
         HOME_DIR : string,
+
+        /**
+         * The directory where the bundled MCPs are located.
+         */
+        BUNDLED_MCP_DIR : string,
+        
     }
 
     exec : (command : string[], options? : {cwd? : string}) => Promise<{stdout : ReadableStream, stderr : ReadableStream, wait : () => Promise<number> }>,

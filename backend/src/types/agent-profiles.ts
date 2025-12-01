@@ -80,6 +80,25 @@ type AgentCommand = {
     prompt : string
 }
 
+
+// ========== MCP ==========================
+/**
+ * An mcp project that will be copied and installed into the sandbox before the sandbox is created.
+ * package.json files + requirement.txt files will be copied into the sandbox image, and then install commands will be run on the image. 
+ * 
+ * The entire project / files will be copied into the sandbox, and then any install commands will be run on sandbox setup. 
+ * 
+ * Other files will be copied into the projects on session creation. This allows for effective image caching without rebuild on code changes.
+ */
+type LocalMcpServer = {
+    name : string, 
+    description : string, 
+    localProjectPath : string, 
+    startCommand : string, 
+    installCommand : string
+}
+
+
 /**
  * Profile for an agent run using the Claude Agent SDK
  */
@@ -90,9 +109,10 @@ export interface AgentProfile extends AgentProfileListData {
     subagents? : ClaudeSubagent[], 
     commands? : AgentCommand[], 
     tools? : string[], 
-    mcp : McpServerConfig[], 
+    bundledMCPs? : LocalMcpServer[]
+    externalMCPs? : McpServerConfig[], 
     /**
-     * Npm dependencies needed to 
+     * Npm dependencies needed to install. -- Not sure if needed. 
      */
     npmDependencies? : string[], 
     pipDependencies? : string[], 
