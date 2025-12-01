@@ -40,7 +40,7 @@ export interface AgentArchitectureAdapter<ArchitectureSessionOptions extends Rec
 
     readSessionTranscript : () => Promise<string | null>,
 
-    parseTranscript : (rawTranscript : string) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}
+    // parseTranscript : (rawTranscript : string) => {blocks : ConversationBlock[], subagents : {id : string, blocks : ConversationBlock[]}[]}
 
     watchWorkspaceFiles: (callback: (event: WorkspaceFileEvent) => void) => Promise<void>;
 

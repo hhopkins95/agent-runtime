@@ -21,7 +21,7 @@ export const getAgentArchitectureAdapter = (architecture : AGENT_ARCHITECTURE_TY
  * For Claude SDK: expects combined JSON format { main: string, subagents: [...] }
  * For OpenCode: expects native JSON format
  */
-export const parseTranscripts = (
+export const parseTranscript = (
     architecture: AGENT_ARCHITECTURE_TYPE,
     rawTranscript: string
 ): { blocks: ConversationBlock[]; subagents: { id: string; blocks: ConversationBlock[] }[] } => {

@@ -90,7 +90,6 @@ export interface PersistenceAdapter {
   saveTranscript(
     sessionId: string,
     rawTranscript: string,
-    subagentId?: string,
   ): Promise<void>;
 
   /**

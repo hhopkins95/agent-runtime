@@ -33,7 +33,7 @@ import type { EventBus } from './event-bus.js';
 import type { SandboxPrimitive } from '../lib/sandbox/base.js';
 import type { AgentArchitectureAdapter, AgentArchitectureSessionOptions, WorkspaceFileEvent, TranscriptChangeEvent } from '../lib/agent-architectures/base.js';
 import { createSandbox } from '../lib/sandbox/factory.js';
-import { createSessionId, getAgentArchitectureAdapter, parseTranscripts } from '../lib/agent-architectures/factory.js';
+import { createSessionId, getAgentArchitectureAdapter, parseTranscript } from '../lib/agent-architectures/factory.js';
 
 /**
  * Callback type for sandbox termination notification
@@ -113,7 +113,7 @@ export class AgentSession {
       let subagents: { id: string; blocks: ConversationBlock[] }[] = []
       if (sessionData.rawTranscript) {
         // parse the saved combined transcript into blocks + subagents
-        const parsed = parseTranscripts(sessionData.type, sessionData.rawTranscript);
+        const parsed = parseTranscript(sessionData.type, sessionData.rawTranscript);
         blocks = parsed.blocks;
         subagents = parsed.subagents;
       }
@@ -405,7 +405,7 @@ export class AgentSession {
     this.rawTranscript = event.content;
 
     // Parse into blocks (adapter handles extracting main + subagents from combined format)
-    const parsed = this.architectureAdapter.parseTranscript(event.content);
+    const parsed = parseTranscript(this.architecture, event.content);
     this.blocks = parsed.blocks;
     this.subagents = parsed.subagents.map(sub => ({
       id: sub.id,
@@ -580,7 +580,7 @@ export class AgentSession {
 
     // Parse blocks using adapter (handles combined format internally)
     if (transcript) {
-      const parsed = this.architectureAdapter.parseTranscript(transcript);
+      const parsed = parseTranscript(this.architecture, transcript);
       this.blocks = parsed.blocks;
       this.subagents = parsed.subagents.map(sub => ({
         id: sub.id,

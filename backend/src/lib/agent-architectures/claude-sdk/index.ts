@@ -28,33 +28,27 @@ export interface CombinedClaudeTranscript {
     subagents: { id: string; transcript: string }[];
 }
 
-
+const getPaths = () => {
+    return {
+        AGENT_STORAGE_DIR: `/root/.claude/projects/-workspace`,
+        WORKSPACE_DIR: `/workspace`,
+        AGENT_PROFILE_DIR: `/workspace/.claude`,
+        AGENT_MD_FILE: `/workspace/CLAUDE.md`,
+    }
+}
 
 export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessionOptions> {
 
     public static createSessionId(): string { return randomUUID() }
-    
+
     public constructor(
         private readonly sandbox: SandboxPrimitive,
         private readonly sessionId: string
     ) { }
 
-    
-    public getPaths() : {
-        AGENT_STORAGE_DIR : string, 
-        WORKSPACE_DIR : string, 
-        AGENT_PROFILE_DIR : string,
-        AGENT_MD_FILE : string,
-    } {
-        return {
-            AGENT_STORAGE_DIR : `/root/.claude/projects/-workspace`,
-            WORKSPACE_DIR : `/workspace`,
-            AGENT_PROFILE_DIR : `/workspace/.claude`,
-            AGENT_MD_FILE : `/workspace/CLAUDE.md`,
-        }
-    }
 
-    private identifySessionTranscriptFile(args: {fileName: string, content: string}): {isMain: true} | {subagentId: string} | null {
+
+    private identifySessionTranscriptFile(args: { fileName: string, content: string }): { isMain: true } | { subagentId: string } | null {
         // Claude SDK transcript files:
         // - Main session: {sessionId}.jsonl
         // - Subagents: agent-{uuid}.jsonl
@@ -241,7 +235,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
             const files = await this.sandbox.listFiles(paths.AGENT_STORAGE_DIR, 'agent-*.jsonl');
 
             // Read all subagent transcripts
-            const subagents: {id: string, transcript: string}[] = [];
+            const subagents: { id: string, transcript: string }[] = [];
             for (const file of files) {
                 // Extract just the filename (listFiles with find returns full paths)
                 const filename = basename(file);
@@ -274,7 +268,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         }
     }
 
-    public async* executeQuery(args: {query: string, options? : ClaudeSDKSessionOptions}): AsyncGenerator<StreamEvent> {
+    public async* executeQuery(args: { query: string, options?: ClaudeSDKSessionOptions }): AsyncGenerator<StreamEvent> {
         try {
             // Build command arguments
             const command = ['tsx', '/app/execute-claude-sdk-query.ts', args.query, '--session-id', this.sessionId];
@@ -345,61 +339,40 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
             throw error;
         }
     }
-
-    /**
-     * Parse raw JSONL transcripts into blocks.
-     * This is the internal parsing logic - use parseTranscript() for the public API.
-     */
-    private static parseRawTranscripts(mainJsonl: string, subagentJsonls: {id: string, transcript: string}[]): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
-        // Parse main transcript
-        const mainMessages = mainJsonl ? parseClaudeTranscriptFile(mainJsonl) : [];
-        const mainBlocks = convertMessagesToBlocks(mainMessages);
-
-        // Parse subagent transcripts
-        const subagentBlocks = subagentJsonls.map((subagent) => {
-            const messages = subagent.transcript ? parseClaudeTranscriptFile(subagent.transcript) : [];
-            const blocks = convertMessagesToBlocks(messages);
-            return {
-                id: subagent.id,
-                blocks,
-            };
-        });
-
-        // Filter out placeholder subagent files (Claude Code creates shell files with only 1 block
-        // when the CLI starts, before any real work is done)
-        const filteredSubagents = subagentBlocks.filter((subagent) => subagent.blocks.length > 1);
-
-        return {
-            blocks: mainBlocks,
-            subagents: filteredSubagents,
-        };
-    }
-
+    
+    
     /**
      * Parse a combined transcript (JSON format) into blocks.
      * Static method for use without an adapter instance (e.g., on session load).
      */
-    public static parseTranscript(combinedTranscript: string): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
+    public static parseTranscript(combinedTranscript: string): { blocks: ConversationBlock[], subagents: { id: string, blocks: ConversationBlock[] }[] } {
         if (!combinedTranscript) {
             return { blocks: [], subagents: [] };
         }
-
         try {
             const combined: CombinedClaudeTranscript = JSON.parse(combinedTranscript);
-            return ClaudeSDKAdapter.parseRawTranscripts(combined.main, combined.subagents);
+
+            const mainBlocks = convertMessagesToBlocks(parseClaudeTranscriptFile(combined.main))
+            const subagentBlocks = combined.subagents.map(raw =>({
+                id : raw.id, 
+                blocks : convertMessagesToBlocks(parseClaudeTranscriptFile(raw.transcript))
+            })).filter(subagent => subagent.blocks.length > 1) // Filter out the default random subagents that claude creates on startup
+
+            return {
+                blocks : mainBlocks, 
+                subagents : subagentBlocks
+            }
+
         } catch (error) {
             // If parsing fails, try treating it as raw JSONL (backwards compatibility)
             logger.warn({ error }, 'Failed to parse as CombinedClaudeTranscript, falling back to raw JSONL');
-            return ClaudeSDKAdapter.parseRawTranscripts(combinedTranscript, []);
+            return { 
+                blocks : [], 
+                subagents : []
+            }
         }
     }
 
-    /**
-     * Instance method that delegates to static parseTranscript
-     */
-    public parseTranscript(rawTranscript: string): {blocks: ConversationBlock[], subagents: {id: string, blocks: ConversationBlock[]}[]} {
-        return ClaudeSDKAdapter.parseTranscript(rawTranscript);
-    }
 
     public async watchWorkspaceFiles(callback: (event: WorkspaceFileEvent) => void): Promise<void> {
         const paths = this.getPaths();
