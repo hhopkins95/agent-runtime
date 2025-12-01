@@ -35,7 +35,8 @@ export type {
   SessionRuntimeState,
   SessionListItem,
   PersistedSessionListData,
-  PersistedSessionData,
+  CreateSessionArgs,
+  PersistedSessionData
 } from './session';
 
 // ============================================================================

@@ -14,16 +14,14 @@
 
 import { logger } from '../config/logger.js';
 import type { ModalContext } from '../lib/sandbox/modal/client.js';
-import type { EventBus } from './event-bus.js';
-import { AgentSession } from './agent-session.js';
-import type {
-  SessionListItem,
-  SessionRuntimeState,
-  AGENT_ARCHITECTURE_TYPE,
-  PersistedSessionListData,
-} from '../types/session/index.js';
-import type { AgentArchitectureSessionOptions } from '../lib/agent-architectures/base.js';
 import type { PersistenceAdapter } from '../types/persistence-adapter.js';
+import type {
+  CreateSessionArgs,
+  SessionListItem,
+  SessionRuntimeState
+} from '../types/session/index.js';
+import { AgentSession } from './agent-session.js';
+import type { EventBus } from './event-bus.js';
 
 /**
  * SessionManager - Container for all agent sessions
@@ -95,11 +93,7 @@ export class SessionManager {
   /**
    * Create a new session
    */
-  async createSession(request: {
-    agentProfileRef: string,
-    architecture: AGENT_ARCHITECTURE_TYPE,
-    sessionOptions?: AgentArchitectureSessionOptions,
-  }): Promise<AgentSession> {
+  async createSession(request: CreateSessionArgs): Promise<AgentSession> {
     try {
       logger.info({ request }, 'Creating new session...');
 
