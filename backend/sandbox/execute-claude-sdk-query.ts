@@ -61,6 +61,7 @@ const program = new Command()
   .argument('<prompt>', 'The user\'s message/prompt to send to the agent')
   .option('-s, --session-id <sessionId>', 'The session id to use')
   .option('-c, --cwd <cwd>', 'The working directory to use. Default is /workspace')
+  .option('-t, --tools <tools>', 'JSON array of allowed tools')
   .parse();
 
 // Extract parsed arguments
@@ -68,6 +69,7 @@ const prompt = program.args[0];
 const options = program.opts();
 const sessionId = options.sessionId;
 const cwd = options.cwd || '/workspace';
+const toolsArg = options.tools;
 
 
 if (!sessionId) { throw new Error("Session ID is required"); }
@@ -103,7 +105,10 @@ async function executeQuery() {
       allowDangerouslySkipPermissions: true,
 
 
-      allowedTools : ["Skill"]
+      // Parse tools from CLI argument, always include "Skill"
+      allowedTools: toolsArg
+        ? [...JSON.parse(toolsArg) as string[], "Skill"]
+        : ["Skill"]
 
       
       // MCP Servers - Register Convex backend tools

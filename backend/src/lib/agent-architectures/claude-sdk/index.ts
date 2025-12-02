@@ -42,6 +42,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
 
     private transcriptUpdateCallback? : (event : TranscriptChangeEvent) => void
+    private profileTools?: string[]
 
     public static createSessionId(): string { return randomUUID() }
 
@@ -59,6 +60,9 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
 
         logger.info({ sessionId: args.sessionId, profileId: args.agentProfile.id }, 'Initializing session');
+
+        // Store profile tools for later use in executeQuery
+        this.profileTools = args.agentProfile.tools;
 
         // Ensure directories exist
         await this.sandbox.exec(['mkdir', '-p', this.getPaths().TRANSCRIPTS_DIR]);
@@ -139,11 +143,12 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
             for (const skill of profile.skills) {
                 const skillDir = `${skillsDir}/${skill.name}`;
 
-                // Main skill markdown file
+                // Main skill markdown file - requires YAML frontmatter for SDK discovery
                 const skillContent = [
-                    `# ${skill.name}`,
-                    '',
-                    skill.description || '',
+                    '---',
+                    `name: ${skill.name}`,
+                    `description: ${skill.description || ''}`,
+                    '---',
                     '',
                     skill.skillMd,
                 ].join('\n');
@@ -252,7 +257,16 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
     public async* executeQuery(args: { query: string, options?: ClaudeSDKSessionOptions }): AsyncGenerator<StreamEvent> {
         try {
             // Build command arguments
-            const command = ['tsx', '/app/execute-claude-sdk-query.ts', args.query, '--session-id', this.sessionId];
+            const command = [
+                'tsx', '/app/execute-claude-sdk-query.ts',
+                args.query,
+                '--session-id', this.sessionId,
+            ];
+
+            // Pass tools if configured
+            if (this.profileTools && this.profileTools.length > 0) {
+                command.push('--tools', JSON.stringify(this.profileTools));
+            }
 
             logger.debug({ command }, 'Executing Claude SDK command');
 
