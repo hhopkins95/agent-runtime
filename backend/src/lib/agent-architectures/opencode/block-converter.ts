@@ -306,15 +306,18 @@ function parsePartUpdatedEvent(
     // This handles the case where one text block ends and another begins
     for (const [blockId, state] of activeBlocks) {
       if (state.block.type === 'assistant_text' || state.block.type === 'thinking') {
-        events.push({
-          type: 'block_complete',
-          blockId,
-          conversationId: state.conversationId,
-          block: {
-            ...state.block,
-            content: state.accumulatedContent,
-          } as ConversationBlock,
-        });
+        // Only emit block_complete if there's actual content (skip empty blocks)
+        if (state.accumulatedContent.trim()) {
+          events.push({
+            type: 'block_complete',
+            blockId,
+            conversationId: state.conversationId,
+            block: {
+              ...state.block,
+              content: state.accumulatedContent,
+            } as ConversationBlock,
+          });
+        }
         activeBlocks.delete(blockId);
       }
     }
@@ -387,7 +390,7 @@ function parsePartUpdatedEvent(
       } as any,
     });
 
-    // If tool is completed or errored, also emit the result
+    // If tool is completed or errored, emit both tool_use and tool_result blocks
     if (state.status === 'completed' || state.status === 'error') {
       // Mark block as inactive
       activeBlocks.delete(part.id);
@@ -401,7 +404,26 @@ function parsePartUpdatedEvent(
         status: state.status,
       }, 'Tool completed - debugging output');
 
-      // Emit tool result as block_complete
+      // Emit block_complete for the tool_use block itself (so client stores it)
+      const toolUseBlock: ConversationBlock = {
+        type: 'tool_use',
+        id: part.id,
+        timestamp: state.time?.start ? toISOTimestamp(state.time.start) : new Date().toISOString(),
+        toolName: part.tool,
+        toolUseId: part.callID,
+        input: state.input || {},
+        status: mapToolStatus(state.status),
+        displayName: state.title,
+      };
+
+      events.push({
+        type: 'block_complete',
+        blockId: part.id,
+        block: toolUseBlock,
+        conversationId,
+      });
+
+      // Emit tool_result as block_complete
       const resultBlock: ConversationBlock = {
         type: 'tool_result',
         id: generateId(),
@@ -480,15 +502,18 @@ function parseSessionIdleEvent(
   // Complete all pending text/reasoning blocks before clearing
   for (const [blockId, state] of activeBlocks) {
     if (state.block.type === 'assistant_text' || state.block.type === 'thinking') {
-      events.push({
-        type: 'block_complete',
-        blockId,
-        conversationId: state.conversationId,
-        block: {
-          ...state.block,
-          content: state.accumulatedContent,
-        } as ConversationBlock,
-      });
+      // Only emit block_complete if there's actual content (skip empty blocks)
+      if (state.accumulatedContent.trim()) {
+        events.push({
+          type: 'block_complete',
+          blockId,
+          conversationId: state.conversationId,
+          block: {
+            ...state.block,
+            content: state.accumulatedContent,
+          } as ConversationBlock,
+        });
+      }
     }
   }
 
