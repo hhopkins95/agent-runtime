@@ -118,6 +118,62 @@ function ToolBlockRenderer({
   );
 }
 
+type ThinkingBlock = Extract<ConversationBlock, { type: "thinking" }>;
+
+/**
+ * Collapsible thinking block renderer
+ * Shows summary when collapsed, full content when expanded
+ */
+function ThinkingBlockRenderer({ block }: { block: ThinkingBlock }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Truncate content for collapsed preview
+  const previewLength = 100;
+  const hasLongContent = block.content.length > previewLength;
+  const preview = hasLongContent
+    ? block.content.slice(0, previewLength) + "..."
+    : block.content;
+
+  return (
+    <div className="flex justify-start mb-4">
+      <div className="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-2 max-w-[80%]">
+        {/* Header with toggle */}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="w-full text-left flex items-center gap-2"
+        >
+          <span className="text-yellow-600 flex-shrink-0">
+            {isExpanded ? "▼" : "▶"}
+          </span>
+          <span className="text-sm font-semibold text-yellow-700">
+            Thinking
+          </span>
+          {block.summary && (
+            <span className="text-xs text-gray-500 italic truncate">
+              — {block.summary}
+            </span>
+          )}
+        </button>
+
+        {/* Content */}
+        {isExpanded ? (
+          <div className="text-sm text-gray-700 whitespace-pre-wrap mt-2 pl-5">
+            {block.content}
+          </div>
+        ) : hasLongContent ? (
+          <div className="text-sm text-gray-500 mt-1 pl-5 italic">
+            {preview}
+          </div>
+        ) : (
+          <div className="text-sm text-gray-700 mt-1 pl-5">
+            {block.content}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Renders different types of conversation blocks
  *
@@ -170,23 +226,7 @@ export function MessageRenderer({ block }: { block: PairedBlock }) {
       return null;
 
     case "thinking":
-      return (
-        <div className="flex justify-start mb-4">
-          <div className="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-2 max-w-[80%]">
-            <div className="text-sm font-semibold mb-1 text-yellow-700">
-              Thinking
-            </div>
-            {block.summary && (
-              <div className="text-xs text-gray-600 mb-2 italic">
-                {block.summary}
-              </div>
-            )}
-            <div className="text-sm text-gray-700 whitespace-pre-wrap">
-              {block.content}
-            </div>
-          </div>
-        </div>
-      );
+      return <ThinkingBlockRenderer block={block} />;
 
     case "system":
       return (
