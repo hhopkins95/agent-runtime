@@ -33,17 +33,21 @@ export function generateSandboxAppInstallCommands({
   commands.push(`RUN mkdir -p ${targetSandboxDirPath}`);
 
 
-  // If package.json exists, add it to the sandbox
+  // If package.json exists, add it to the sandbox (base64 encoded for remote builds)
   const packageJsonPath = path.join(localDirPath, 'package.json');
   if (fs.existsSync(packageJsonPath)) {
-    commands.push(`RUN cp ${packageJsonPath} ${targetSandboxDirPath}/package.json`);
+    const content = fs.readFileSync(packageJsonPath, 'utf-8');
+    const base64Content = Buffer.from(content).toString('base64');
+    commands.push(`RUN echo '${base64Content}' | base64 -d > ${targetSandboxDirPath}/package.json`);
     isPackageJson = true;
   }
 
-  // If requirement.txt exists, add it to the sandbox
-  const requirementTxtPath = path.join(localDirPath, 'requirement.txt');
-  if (fs.existsSync(requirementTxtPath)) {
-    commands.push(`RUN cp ${requirementTxtPath} ${targetSandboxDirPath}/requirement.txt`);
+  // If requirements.txt exists, add it to the sandbox (base64 encoded for remote builds)
+  const requirementsTxtPath = path.join(localDirPath, 'requirements.txt');
+  if (fs.existsSync(requirementsTxtPath)) {
+    const content = fs.readFileSync(requirementsTxtPath, 'utf-8');
+    const base64Content = Buffer.from(content).toString('base64');
+    commands.push(`RUN echo '${base64Content}' | base64 -d > ${targetSandboxDirPath}/requirements.txt`);
     isRequirementTxt = true;
   }
 
