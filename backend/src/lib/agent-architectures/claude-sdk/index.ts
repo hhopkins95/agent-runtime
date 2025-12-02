@@ -11,7 +11,7 @@ import { parseStreamEvent, convertMessagesToBlocks } from "./block-converter.js"
 import { logger } from "../../../config/logger.js";
 import { streamJSONL } from "../../helpers/stream.js";
 import { randomUUID } from "crypto";
-import { buildMcpJson } from "./build-mcp-json.js";
+import { buildMcpJson, McpServerConfig } from "./build-mcp-json.js";
 
 
 
@@ -43,6 +43,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
     private transcriptUpdateCallback? : (event : TranscriptChangeEvent) => void
     private profileTools?: string[]
+    private mcpServers?: Record<string, McpServerConfig>
 
     public static createSessionId(): string { return randomUUID() }
 
@@ -63,6 +64,13 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
         // Store profile tools for later use in executeQuery
         this.profileTools = args.agentProfile.tools;
+
+        // Store MCP config for later use in executeQuery
+        if (args.agentProfile.bundledMCPs && args.agentProfile.bundledMCPs.length > 0) {
+            const mcpServersPath = this.sandbox.getBasePaths().BUNDLED_MCP_DIR;
+            const mcpJSON = buildMcpJson(args.agentProfile, mcpServersPath);
+            this.mcpServers = mcpJSON.mcpServers;
+        }
 
         // Ensure directories exist
         await this.sandbox.exec(['mkdir', '-p', this.getPaths().TRANSCRIPTS_DIR]);
@@ -266,6 +274,11 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
             // Pass tools if configured
             if (this.profileTools && this.profileTools.length > 0) {
                 command.push('--tools', JSON.stringify(this.profileTools));
+            }
+
+            // Pass MCP servers if configured
+            if (this.mcpServers && Object.keys(this.mcpServers).length > 0) {
+                command.push('--mcp-servers', JSON.stringify(this.mcpServers));
             }
 
             logger.debug({ command }, 'Executing Claude SDK command');

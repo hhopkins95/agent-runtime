@@ -2,7 +2,7 @@ import path from "path";
 import type { AgentProfile } from "../../../types";
 import { normalizeString } from "../../util/normalize-string";
 
-type McpServerConfig = {
+export type McpServerConfig = {
   type: "stdio";
   command: string;
   args: string[];

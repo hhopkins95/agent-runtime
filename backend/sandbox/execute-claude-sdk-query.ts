@@ -62,6 +62,7 @@ const program = new Command()
   .option('-s, --session-id <sessionId>', 'The session id to use')
   .option('-c, --cwd <cwd>', 'The working directory to use. Default is /workspace')
   .option('-t, --tools <tools>', 'JSON array of allowed tools')
+  .option('-m, --mcp-servers <mcpServers>', 'JSON object of MCP server configs')
   .parse();
 
 // Extract parsed arguments
@@ -70,6 +71,7 @@ const options = program.opts();
 const sessionId = options.sessionId;
 const cwd = options.cwd || '/workspace';
 const toolsArg = options.tools;
+const mcpServersArg = options.mcpServers;
 
 
 if (!sessionId) { throw new Error("Session ID is required"); }
@@ -108,13 +110,10 @@ async function executeQuery() {
       // Parse tools from CLI argument, always include "Skill"
       allowedTools: toolsArg
         ? [...JSON.parse(toolsArg) as string[], "Skill"]
-        : ["Skill"]
+        : ["Skill"],
 
-      
-      // MCP Servers - Register Convex backend tools
-      // mcpServers: {
-      //   // convex: convexTools,
-      // },
+      // MCP Servers - pass directly from CLI argument
+      mcpServers: mcpServersArg ? JSON.parse(mcpServersArg) : undefined,
     };
 
 
