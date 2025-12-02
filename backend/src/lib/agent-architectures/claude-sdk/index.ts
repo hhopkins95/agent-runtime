@@ -11,6 +11,7 @@ import { parseStreamEvent, convertMessagesToBlocks } from "./block-converter.js"
 import { logger } from "../../../config/logger.js";
 import { streamJSONL } from "../../helpers/stream.js";
 import { randomUUID } from "crypto";
+import { buildMcpJson } from "./build-mcp-json.js";
 
 
 
@@ -28,16 +29,17 @@ export interface CombinedClaudeTranscript {
     subagents: { id: string; transcript: string }[];
 }
 
-const getPaths = () => {
-    return {
-        AGENT_STORAGE_DIR: `/root/.claude/projects/-workspace`,
-        WORKSPACE_DIR: `/workspace`,
-        AGENT_PROFILE_DIR: `/workspace/.claude`,
-        AGENT_MD_FILE: `/workspace/CLAUDE.md`,
-    }
-}
-
 export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessionOptions> {
+
+    private getPaths() {
+        const sandboxPaths = this.sandbox.getBasePaths()
+        return {
+            TRANSCRIPTS_DIR: sandboxPaths.HOME_DIR + "/.claude/projects/-workspace",
+            PROJECT_CLAUDE_DIR: sandboxPaths.WORKSPACE_DIR + "/.claude",
+            PROJECT_CLAUDE_MD: sandboxPaths.WORKSPACE_DIR + "/CLAUDE.md",
+        }
+    }
+
 
     private transcriptUpdateCallback? : (event : TranscriptChangeEvent) => void
 
@@ -48,24 +50,22 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         private readonly sessionId: string
     ) { }
 
-
     public async initializeSession(args: {
         sessionId: string,
         sessionTranscript: string | undefined,
         agentProfile: AgentProfile,
         workspaceFiles: WorkspaceFile[]
     }): Promise<void> {
-        const paths = getPaths();
+
 
         logger.info({ sessionId: args.sessionId, profileId: args.agentProfile.id }, 'Initializing session');
 
         // Ensure directories exist
-        await this.sandbox.exec(['mkdir', '-p', paths.AGENT_STORAGE_DIR]);
-        await this.sandbox.exec(['mkdir', '-p', paths.AGENT_PROFILE_DIR]);
+        await this.sandbox.exec(['mkdir', '-p', this.getPaths().TRANSCRIPTS_DIR]);
+        await this.sandbox.exec(['mkdir', '-p', this.getPaths().PROJECT_CLAUDE_DIR]);
 
         // Collect all files to write in batches
-        const transcriptFiles: { path: string; content: string }[] = [];
-        const profileFiles: { path: string; content: string }[] = [];
+        const filesToWrite: { path: string; content: string }[] = [];
 
         // --- Transcript files ---
         if (args.sessionTranscript) {
@@ -74,16 +74,16 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
                 // Main transcript
                 if (combined.main) {
-                    transcriptFiles.push({
-                        path: `${paths.AGENT_STORAGE_DIR}/${args.sessionId}.jsonl`,
+                    filesToWrite.push({
+                        path: `${this.getPaths().TRANSCRIPTS_DIR}/${args.sessionId}.jsonl`,
                         content: combined.main
                     });
                 }
 
                 // Subagent transcripts
                 for (const subagent of combined.subagents) {
-                    transcriptFiles.push({
-                        path: `${paths.AGENT_STORAGE_DIR}/agent-${subagent.id}.jsonl`,
+                    filesToWrite.push({
+                        path: `${this.getPaths().TRANSCRIPTS_DIR}/agent-${subagent.id}.jsonl`,
                         content: subagent.transcript
                     });
                 }
@@ -97,15 +97,15 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
         // CLAUDE.md file (main agent instructions)
         if (profile.agentMDFile) {
-            profileFiles.push({
-                path: paths.AGENT_MD_FILE,
-                content: profile.agentMDFile
+            filesToWrite.push({
+                path: this.getPaths().PROJECT_CLAUDE_MD,
+               content: profile.agentMDFile
             });
         }
 
         // Subagent definitions
         if (profile.subagents && profile.subagents.length > 0) {
-            const agentsDir = `${paths.AGENT_PROFILE_DIR}/agents`;
+            const agentsDir = `${this.getPaths().PROJECT_CLAUDE_DIR}/agents`;
             for (const subagent of profile.subagents) {
                 const subagentContent = [
                     `# ${subagent.name}`,
@@ -115,7 +115,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
                     subagent.prompt,
                 ].join('\n');
 
-                profileFiles.push({
+                filesToWrite.push({
                     path: `${agentsDir}/${subagent.name}.md`,
                     content: subagentContent
                 });
@@ -124,9 +124,9 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
         // Custom commands
         if (profile.commands && profile.commands.length > 0) {
-            const commandsDir = `${paths.AGENT_PROFILE_DIR}/commands`;
+            const commandsDir = `${this.getPaths().PROJECT_CLAUDE_DIR}/commands`;
             for (const command of profile.commands) {
-                profileFiles.push({
+                filesToWrite.push({
                     path: `${commandsDir}/${command.name}.md`,
                     content: command.prompt
                 });
@@ -135,7 +135,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
         // Skills
         if (profile.skills && profile.skills.length > 0) {
-            const skillsDir = `${paths.AGENT_PROFILE_DIR}/skills`;
+            const skillsDir = `${this.getPaths().PROJECT_CLAUDE_DIR}/skills`;
             for (const skill of profile.skills) {
                 const skillDir = `${skillsDir}/${skill.name}`;
 
@@ -148,7 +148,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
                     skill.skillMd,
                 ].join('\n');
 
-                profileFiles.push({
+                filesToWrite.push({
                     path: `${skillDir}/skill.md`,
                     content: skillContent
                 });
@@ -156,7 +156,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
                 // Supporting files
                 if (skill.supportingFiles && skill.supportingFiles.length > 0) {
                     for (const file of skill.supportingFiles) {
-                        profileFiles.push({
+                        filesToWrite.push({
                             path: `${skillDir}/${file.relativePath}`,
                             content: file.content
                         });
@@ -165,26 +165,28 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
             }
         }
 
+        // MCP servers
+        if (profile.bundledMCPs && profile.bundledMCPs.length > 0) {
+            const mcpServersPath = this.sandbox.getBasePaths().BUNDLED_MCP_DIR
+            const mcpJSON = buildMcpJson(profile, mcpServersPath)
+            const mcpServersJSONPath = `${this.getPaths().PROJECT_CLAUDE_DIR}/mcp.json`;
+
+            filesToWrite.push({
+                path: mcpServersJSONPath,
+                content: JSON.stringify(mcpJSON, null, 2)
+            });
+
+        }
+
         // Write all files in parallel batches
         const writePromises: Promise<any>[] = [];
 
-        if (transcriptFiles.length > 0) {
-            logger.debug({ fileCount: transcriptFiles.length }, 'Writing transcript files');
+        if (filesToWrite.length > 0) {
+            logger.debug({ fileCount: filesToWrite.length }, 'Writing transcript files');
             writePromises.push(
-                this.sandbox.writeFiles(transcriptFiles).then(result => {
+                this.sandbox.writeFiles(filesToWrite).then(result => {
                     if (result.failed.length > 0) {
                         logger.warn({ failed: result.failed }, 'Some transcript files failed to write');
-                    }
-                })
-            );
-        }
-
-        if (profileFiles.length > 0) {
-            logger.debug({ fileCount: profileFiles.length }, 'Writing profile files');
-            writePromises.push(
-                this.sandbox.writeFiles(profileFiles).then(result => {
-                    if (result.failed.length > 0) {
-                        logger.warn({ failed: result.failed }, 'Some profile files failed to write');
                     }
                 })
             );
@@ -356,9 +358,8 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
 
 
     public async watchWorkspaceFiles(callback: (event: WorkspaceFileEvent) => void): Promise<void> {
-        const paths = this.getPaths();
 
-        await this.sandbox.watch(paths.WORKSPACE_DIR, (event) => {
+        await this.sandbox.watch(this.sandbox.getBasePaths().WORKSPACE_DIR, (event) => {
             callback({
                 type: event.type,
                 path: event.path,
