@@ -29,7 +29,6 @@ server.addTool({
       version: "1.0.0",
       description: "A simple echo MCP server for testing",
       timestamp: new Date().toISOString(),
-      pid: process.pid,
     }, null, 2);
   },
 });
