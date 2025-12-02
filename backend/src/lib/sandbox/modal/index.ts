@@ -8,7 +8,12 @@ import { AGENT_ARCHITECTURE_TYPE } from "../../../types/session/index";
 import { logger } from "../../../config/logger";
 import { copyLocalFilesToSandbox } from "../../helpers/copy-local-files-to-sandbox";
 import path from "path";
+import { fileURLToPath } from "url";
 import { normalizeString } from "../../util/normalize-string";
+
+// ES module __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 
 export class ModalSandbox implements SandboxPrimitive {
