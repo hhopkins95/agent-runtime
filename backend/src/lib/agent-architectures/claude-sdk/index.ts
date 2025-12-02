@@ -169,7 +169,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
         if (profile.bundledMCPs && profile.bundledMCPs.length > 0) {
             const mcpServersPath = this.sandbox.getBasePaths().BUNDLED_MCP_DIR
             const mcpJSON = buildMcpJson(profile, mcpServersPath)
-            const mcpServersJSONPath = `${this.getPaths().PROJECT_CLAUDE_DIR}/mcp.json`;
+            const mcpServersJSONPath = `${this.getPaths().PROJECT_CLAUDE_DIR}/.mcp.json`;
 
             filesToWrite.push({
                 path: mcpServersJSONPath,

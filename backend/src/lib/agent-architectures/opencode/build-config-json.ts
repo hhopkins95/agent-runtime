@@ -13,7 +13,7 @@ type OpencodeMcpJson = {
   mcp: Record<string, OpencodeMcpServerConfig>;
 };
 
-export const buildMcpJson = (agentProfile: AgentProfile, baseMcpDir: string): OpencodeMcpJson => {
+export const buildOpencodeConfigJson = (agentProfile: AgentProfile, baseMcpDir: string): OpencodeMcpJson => {
   const mcp: Record<string, OpencodeMcpServerConfig> = {};
 
   if (agentProfile.bundledMCPs) {
