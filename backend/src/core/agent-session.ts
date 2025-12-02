@@ -265,7 +265,12 @@ export class AgentSession {
 
     // Step 3: Setup session files
     this.emitRuntimeStatus("Setting up session files...");
-    await this.setupSessionFiles();
+    await this.architectureAdapter.initializeSession({
+      sessionId: this.sessionId,
+      sessionTranscript: this.rawTranscript,
+      agentProfile: this.agentProfile,
+      workspaceFiles: this.workspaceFiles,
+    });
 
     // Step 4: Start watchers
     this.emitRuntimeStatus("Initializing file watchers...");
@@ -282,50 +287,6 @@ export class AgentSession {
     logger.info({ sessionId: this.sessionId, sandboxId: this.sandboxId }, 'Sandbox activated');
   }
 
-  /**
-   * Setup session files in the sandbox (transcripts, profile, workspace files)
-   */
-  private async setupSessionFiles(): Promise<void> {
-    if (!this.architectureAdapter || !this.sandboxPrimitive) {
-      throw new Error('Cannot setup session files without adapter and sandbox');
-    }
-
-    // Initialize session with adapter (handles transcripts + agent profile)
-    await this.architectureAdapter.initializeSession({
-      sessionId: this.sessionId,
-      sessionTranscript: this.rawTranscript,
-      agentProfile: this.agentProfile,
-      workspaceFiles: this.workspaceFiles,
-    });
-
-    // Setup workspace files separately
-    await this.setupWorkspaceFiles();
-  }
-
-  /**
-   * Write workspace files to the sandbox
-   */
-  private async setupWorkspaceFiles(): Promise<void> {
-    if (!this.sandboxPrimitive) return;
-
-    const files = [
-      ...(this.agentProfile.defaultWorkspaceFiles || []),
-      ...this.workspaceFiles,
-    ];
-
-    if (files.length === 0) return;
-
-    const basePaths = this.sandboxPrimitive.getBasePaths();
-    const filesToWrite = files.map(file => ({
-      path: `${basePaths.WORKSPACE_DIR}/${file.path}`,
-      content: file.content
-    }));
-
-    const result = await this.sandboxPrimitive.writeFiles(filesToWrite);
-    if (result.failed.length > 0) {
-      logger.warn({ failed: result.failed }, 'Some workspace files failed to write');
-    }
-  }
 
   /**
    * Start file watchers for workspace and transcript directories

@@ -88,7 +88,7 @@ async function executeQuery() {
       cwd: cwd,
 
       // Load .claude/ configurations
-      settingSources: ['project', 'local'] as SettingSource[],
+      settingSources: ['project', 'user'] as SettingSource[],
 
       // Enable streaming of partial messages
       includePartialMessages: true,
@@ -102,10 +102,14 @@ async function executeQuery() {
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
 
+
+      allowedTools : ["Skill"]
+
+      
       // MCP Servers - Register Convex backend tools
-      mcpServers: {
-        // convex: convexTools,
-      },
+      // mcpServers: {
+      //   // convex: convexTools,
+      // },
     };
 
 

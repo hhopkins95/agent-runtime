@@ -149,7 +149,7 @@ export class ClaudeSDKAdapter implements AgentArchitectureAdapter<ClaudeSDKSessi
                 ].join('\n');
 
                 filesToWrite.push({
-                    path: `${skillDir}/skill.md`,
+                    path: `${skillDir}/SKILL.md`,
                     content: skillContent
                 });
 
