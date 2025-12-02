@@ -1,8 +1,35 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { useMessages } from "@hhopkins/agent-runtime-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useMessages, type ConversationBlock } from "@hhopkins/agent-runtime-react";
 import { MessageRenderer } from "./MessageRenderer";
+
+type ToolResultBlock = Extract<ConversationBlock, { type: "tool_result" }>;
+
+/**
+ * Pairs tool_use blocks with their corresponding tool_result blocks.
+ * Returns a new array where tool_result blocks are filtered out and
+ * tool_use blocks have an optional _pairedResult property attached.
+ */
+function pairToolBlocks(blocks: ConversationBlock[]): (ConversationBlock & { _pairedResult?: ToolResultBlock })[] {
+  // Build map: toolUseId -> ToolResultBlock
+  const resultMap = new Map<string, ToolResultBlock>();
+  for (const block of blocks) {
+    if (block.type === "tool_result") {
+      resultMap.set(block.toolUseId, block);
+    }
+  }
+
+  // Return blocks with results attached, filtering out standalone tool_result
+  return blocks
+    .filter((b) => b.type !== "tool_result")
+    .map((block) => {
+      if (block.type === "tool_use") {
+        return { ...block, _pairedResult: resultMap.get(block.toolUseId) };
+      }
+      return block;
+    });
+}
 
 interface AgentChatProps {
   sessionId: string;
@@ -22,6 +49,9 @@ export function AgentChat({ sessionId }: AgentChatProps) {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Pair tool_use blocks with their tool_result blocks
+  const pairedBlocks = useMemo(() => pairToolBlocks(blocks), [blocks]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -80,7 +110,7 @@ export function AgentChat({ sessionId }: AgentChatProps) {
           </div>
         )}
 
-        {blocks.map((block) => (
+        {pairedBlocks.map((block) => (
           <MessageRenderer key={block.id} block={block} />
         ))}
 

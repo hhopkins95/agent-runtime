@@ -1,8 +1,31 @@
 "use client";
 
-import { useState } from "react";
-import { useSubagents } from "@hhopkins/agent-runtime-react";
+import { useState, useMemo } from "react";
+import { useSubagents, type ConversationBlock } from "@hhopkins/agent-runtime-react";
 import { MessageRenderer } from "./MessageRenderer";
+
+type ToolResultBlock = Extract<ConversationBlock, { type: "tool_result" }>;
+
+/**
+ * Pairs tool_use blocks with their corresponding tool_result blocks.
+ */
+function pairToolBlocks(blocks: ConversationBlock[]): (ConversationBlock & { _pairedResult?: ToolResultBlock })[] {
+  const resultMap = new Map<string, ToolResultBlock>();
+  for (const block of blocks) {
+    if (block.type === "tool_result") {
+      resultMap.set(block.toolUseId, block);
+    }
+  }
+
+  return blocks
+    .filter((b) => b.type !== "tool_result")
+    .map((block) => {
+      if (block.type === "tool_use") {
+        return { ...block, _pairedResult: resultMap.get(block.toolUseId) };
+      }
+      return block;
+    });
+}
 
 interface SubagentViewerProps {
   sessionId: string;
@@ -142,7 +165,7 @@ export function SubagentViewer({ sessionId }: SubagentViewerProps) {
               )}
 
               <div className="space-y-2">
-                {selectedSubagent.blocks.map((block) => (
+                {pairToolBlocks(selectedSubagent.blocks).map((block) => (
                   <MessageRenderer key={block.id} block={block} />
                 ))}
               </div>
