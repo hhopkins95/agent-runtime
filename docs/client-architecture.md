@@ -289,7 +289,7 @@ Debug event log for all WebSocket events.
 
 ```typescript
 // Session types
-type AGENT_ARCHITECTURE_TYPE = 'claude-agent-sdk' | 'gemini-cli';
+type AGENT_ARCHITECTURE_TYPE = 'claude-agent-sdk' | 'opencode';
 type SandboxStatus = 'starting' | 'ready' | 'unhealthy' | 'terminated';
 
 interface SessionRuntimeState {
@@ -327,7 +327,8 @@ type ConversationBlock =
   | ToolResultBlock
   | ThinkingBlock
   | SystemBlock
-  | SubagentBlock;
+  | SubagentBlock
+  | ErrorBlock;
 
 // WebSocket events
 interface ServerToClientEvents { ... }

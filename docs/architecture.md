@@ -4,7 +4,7 @@ This document describes the architecture of the agent runtime system, including 
 
 ## Overview
 
-The agent runtime orchestrates AI agents (Claude via Agent SDK, Gemini via CLI) in isolated Modal sandboxes. It provides a backend runtime and React client library for building applications with AI agents.
+The agent runtime orchestrates AI agents (Claude via Agent SDK, OpenCode) in isolated Modal sandboxes. It provides a backend runtime and React client library for building applications with AI agents.
 
 ```mermaid
 graph TB
@@ -479,7 +479,7 @@ stateDiagram-v2
 
 ## Architecture Adapters
 
-The `AgentArchitectureAdapter` interface abstracts the differences between agent architectures (Claude SDK, Gemini CLI).
+The `AgentArchitectureAdapter` interface abstracts the differences between agent architectures (Claude SDK, OpenCode).
 
 ```mermaid
 classDiagram
@@ -498,12 +498,12 @@ classDiagram
         +parseTranscripts(raw, subagents) ParsedBlocks$
     }
 
-    class GeminiCLIAdapter {
+    class OpenCodeAdapter {
         +parseTranscripts(raw, subagents) ParsedBlocks$
     }
 
     AgentArchitectureAdapter <|.. ClaudeSDKAdapter
-    AgentArchitectureAdapter <|.. GeminiCLIAdapter
+    AgentArchitectureAdapter <|.. OpenCodeAdapter
 ```
 
 **Static Parsing:** Both adapters have a static `parseTranscripts()` method accessible via the `parseTranscripts(architecture, raw, subagents)` factory function in `factory.ts`. This allows parsing transcripts without a sandbox.

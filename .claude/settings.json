@@ -1,6 +1,6 @@
 {
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
-    "example-skills@anthropic-agent-skills": false
+    "example-skills@anthropic-agent-skills": true
   }
 }
