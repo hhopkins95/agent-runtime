@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAgentSession, useSessionList } from "@hhopkins/agent-runtime-react";
 import type { SessionListItem, AGENT_ARCHITECTURE_TYPE, AgentArchitectureSessionOptions } from "@hhopkins/agent-runtime-react";
-import { SUPPORTED_ARCHITECTURES, type SupportedArchitecture } from "../lib/constants";
+import { SUPPORTED_ARCHITECTURES, getModelOptionsForArchitecture, type SupportedArchitecture } from "../lib/constants";
 
 interface SessionListProps {
   currentSessionId: string | null;
@@ -193,13 +193,18 @@ export function SessionList({ currentSessionId, onSessionSelect }: SessionListPr
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Model (optional)
               </label>
-              <input
-                type="text"
+              <select
                 value={modelOption}
                 onChange={(e) => setModelOption(e.target.value)}
-                placeholder="e.g., claude-sonnet-4-20250514"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+              >
+                <option value="">Default</option>
+                {getModelOptionsForArchitecture(selectedArchitecture).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Action Buttons */}

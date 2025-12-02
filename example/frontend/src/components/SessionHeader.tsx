@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useSessionList } from "@hhopkins/agent-runtime-react";
+import { useSessionList, useAgentSession } from "@hhopkins/agent-runtime-react";
 import type { SessionListItem } from "@hhopkins/agent-runtime-react";
-import { BACKEND_URL, API_KEY } from "@/lib/constants";
+import { BACKEND_URL, API_KEY, type SupportedArchitecture } from "@/lib/constants";
+import { SessionOptionsPopover } from "./SessionOptionsPopover";
 
 interface SessionHeaderProps {
   sessionId: string;
@@ -71,6 +72,7 @@ function formatDate(timestamp?: number): string {
  */
 export function SessionHeader({ sessionId, onDelete }: SessionHeaderProps) {
   const { sessions, refresh } = useSessionList();
+  const { updateSessionOptions, isLoading: isUpdatingOptions } = useAgentSession(sessionId);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -155,6 +157,17 @@ export function SessionHeader({ sessionId, onDelete }: SessionHeaderProps) {
               {session.type}
             </span>
           </div>
+
+          {/* Session options */}
+          <SessionOptionsPopover
+            architecture={session.type as SupportedArchitecture}
+            currentModel={session.sessionOptions?.model}
+            onModelChange={async (model) => {
+              await updateSessionOptions({ model });
+              await refresh();
+            }}
+            isUpdating={isUpdatingOptions}
+          />
 
           {/* Runtime status */}
           <div className="flex items-center gap-2">
