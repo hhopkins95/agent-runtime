@@ -21,6 +21,7 @@ import { AgentArchitectureAdapter, TranscriptChangeEvent, WorkspaceFileEvent } f
 import { parseOpencodeStreamEvent } from './block-converter.js';
 import { parseOpenCodeTranscriptFile } from './opencode-transcript-parser.js';
 import { WorkspaceFile } from '../../../types/session/index.js';
+import { buildConfigJson } from './build-config-json.js';
 
 
 export interface OpenCodeSessionOptions {
@@ -59,163 +60,114 @@ export class OpenCodeAdapter implements AgentArchitectureAdapter<OpenCodeSession
     agentProfile: AgentProfile,
     workspaceFiles: WorkspaceFile[]
   }): Promise<void> {
-    throw new Error('Not implemented');
-  }
+    logger.info({ sessionId: args.sessionId, profileId: args.agentProfile.id }, 'Initializing session');
 
-
-  public async setupAgentProfile(args: { agentProfile: AgentProfile }): Promise<void> {
     const paths = this.getPaths();
     const profile = args.agentProfile;
 
-    try {
-      logger.info({ profileId: profile.id }, 'Setting up agent profile for OpenCode');
+    // Ensure directories exist
+    await this.sandbox.exec(['mkdir', '-p', paths.AGENT_PROFILE_DIR]);
 
-      const filesToWrite: { path: string; content: string }[] = [];
+    // Collect all files to write in batches
+    const filesToWrite: { path: string; content: string }[] = [];
 
-      // 1. AGENTS.md file (OpenCode's equivalent of CLAUDE.md)
-      if (profile.agentMDFile) {
+    // --- Transcript restoration ---
+    if (args.sessionTranscript) {
+      const tempPath = `/tmp/${randomUUID()}.json`;
+      await this.sandbox.writeFile(tempPath, args.sessionTranscript);
+      await this.sandbox.exec(['opencode', 'session', 'import', tempPath]);
+    }
+
+    // --- AGENTS.md file (OpenCode's equivalent of CLAUDE.md) ---
+    if (profile.agentMDFile) {
+      filesToWrite.push({
+        path: paths.AGENT_MD_FILE,
+        content: profile.agentMDFile,
+      });
+    }
+
+    // --- Subagent definitions → .opencode/agent/ ---
+    if (profile.subagents && profile.subagents.length > 0) {
+      const agentsDir = `${paths.AGENT_PROFILE_DIR}/agent`;
+      for (const subagent of profile.subagents) {
+        const subagentContent = [
+          `# ${subagent.name}`,
+          '',
+          subagent.description || '',
+          '',
+          subagent.prompt,
+        ].join('\n');
+
         filesToWrite.push({
-          path: paths.AGENT_MD_FILE,
-          content: profile.agentMDFile,
+          path: `${agentsDir}/${subagent.name}.md`,
+          content: subagentContent,
         });
       }
+    }
 
-      // 2. Subagent definitions → .opencode/agent/
-      if (profile.subagents && profile.subagents.length > 0) {
-        const agentsDir = `${paths.AGENT_PROFILE_DIR}/agent`;
-        for (const subagent of profile.subagents) {
-          const subagentContent = [
-            `# ${subagent.name}`,
-            '',
-            subagent.description || '',
-            '',
-            subagent.prompt,
-          ].join('\n');
-
-          filesToWrite.push({
-            path: `${agentsDir}/${subagent.name}.md`,
-            content: subagentContent,
-          });
-        }
+    // --- Custom commands → .opencode/command/ ---
+    if (profile.commands && profile.commands.length > 0) {
+      const commandsDir = `${paths.AGENT_PROFILE_DIR}/command`;
+      for (const command of profile.commands) {
+        filesToWrite.push({
+          path: `${commandsDir}/${command.name}.md`,
+          content: command.prompt,
+        });
       }
+    }
 
-      // 3. Custom commands → .opencode/command/
-      if (profile.commands && profile.commands.length > 0) {
-        const commandsDir = `${paths.AGENT_PROFILE_DIR}/command`;
-        for (const command of profile.commands) {
-          filesToWrite.push({
-            path: `${commandsDir}/${command.name}.md`,
-            content: command.prompt,
-          });
-        }
-      }
+    // --- Skills → .opencode/skills/{skillName}/ ---
+    if (profile.skills && profile.skills.length > 0) {
+      const skillsDir = `${paths.AGENT_PROFILE_DIR}/skills`;
+      for (const skill of profile.skills) {
+        const skillDir = `${skillsDir}/${skill.name}`;
 
-      // 4. Skills → .opencode/skills/{skillName}/
-      // Uses the opencode-skills plugin (https://github.com/malhashemi/opencode-skills)
-      // which implements Anthropic's Skills specification
-      if (profile.skills && profile.skills.length > 0) {
-        const skillsDir = `${paths.AGENT_PROFILE_DIR}/skills`;
-        for (const skill of profile.skills) {
-          const skillDir = `${skillsDir}/${skill.name}`;
+        // Create SKILL.md with YAML frontmatter
+        const skillContent = [
+          '---',
+          `name: ${skill.name}`,
+          `description: "${skill.description.replace(/"/g, '\\"')}"`,
+          '---',
+          '',
+          skill.skillMd,
+        ].join('\n');
 
-          // Create SKILL.md with frontmatter
-          const skillContent = [
-            '---',
-            `name: ${skill.name}`,
-            `description: "${skill.description.replace(/"/g, '\\"')}"`,
-            '---',
-            '',
-            skill.skillMd,
-          ].join('\n');
+        filesToWrite.push({
+          path: `${skillDir}/SKILL.md`,
+          content: skillContent,
+        });
 
-          filesToWrite.push({
-            path: `${skillDir}/SKILL.md`,
-            content: skillContent,
-          });
-
-          // Add supporting files
-          if (skill.supportingFiles && skill.supportingFiles.length > 0) {
-            for (const file of skill.supportingFiles) {
-              filesToWrite.push({
-                path: `${skillDir}/${file.relativePath}`,
-                content: file.content,
-              });
-            }
+        // Add supporting files
+        if (skill.supportingFiles && skill.supportingFiles.length > 0) {
+          for (const file of skill.supportingFiles) {
+            filesToWrite.push({
+              path: `${skillDir}/${file.relativePath}`,
+              content: file.content,
+            });
           }
         }
       }
-
-      // 5. OpenCode configuration file
-      // Include opencode-skills plugin if skills are defined
-      const plugins: string[] = [];
-      if (profile.skills && profile.skills.length > 0) {
-        plugins.push('opencode-skills');
-      }
-
-      // Build MCP server configuration if present
-      // OpenCode uses a slightly different MCP config format than Claude SDK
-      let mcpConfig: Record<string, unknown> | undefined;
-      // if (profile.mcp && profile.mcp.length > 0) {
-      //   mcpConfig = {
-      //     stdio: profile.mcp.map((server) => ({
-      //       command: server.command,
-      //       args: server.args || [],
-      //       ...(server.env && { env: server.env }),
-      //     })),
-      //   };
-      // }
-
-      filesToWrite.push({
-        path: `${paths.AGENT_PROFILE_DIR}/opencode.json`,
-        content: JSON.stringify(
-          {
-            permission: {
-              bash: 'allow', // Non-interactive mode
-              edit: 'allow',
-              external_directory: 'deny',
-            },
-            ...(plugins.length > 0 && { plugin: plugins }),
-            ...(mcpConfig && { mcp: mcpConfig }),
-          },
-          null,
-          2
-        ),
-      });
-
-      // Write all files in a batch
-      if (filesToWrite.length > 0) {
-        logger.debug({ fileCount: filesToWrite.length }, 'Writing OpenCode profile files');
-        const result = await this.sandbox.writeFiles(filesToWrite);
-
-        if (result.failed.length > 0) {
-          logger.warn(
-            { failed: result.failed, succeeded: result.success.length },
-            'Some OpenCode profile files failed to write'
-          );
-        }
-      }
-
-      logger.info({ profileId: profile.id }, 'OpenCode agent profile setup complete');
-    } catch (error) {
-      logger.error({ error, profileId: profile.id }, 'Failed to setup OpenCode agent profile');
-      throw error;
     }
-  }
 
-  public async setupSessionTranscripts(args: {
-    sessionId: string;
-    mainTranscript: string;
-    subagents: { id: string; transcript: string }[];
-  }): Promise<void> {
+    // --- Config file (permissions + plugins + MCP) ---
+    const mcpServersPath = this.sandbox.getBasePaths().BUNDLED_MCP_DIR;
+    const config = buildConfigJson(profile, mcpServersPath);
+    filesToWrite.push({
+      path: `${paths.AGENT_PROFILE_DIR}/opencode.json`,
+      content: JSON.stringify(config, null, 2),
+    });
 
-    const randomId = randomUUID()
-    const filePath = `/tmp/${randomId}.json`
+    // Write all files in batch
+    if (filesToWrite.length > 0) {
+      logger.debug({ fileCount: filesToWrite.length }, 'Writing OpenCode profile files');
+      const result = await this.sandbox.writeFiles(filesToWrite);
 
-    // write the transcript to a random tmp file 
-    await this.sandbox.writeFile(filePath, args.mainTranscript);
+      if (result.failed.length > 0) {
+        logger.warn({ failed: result.failed }, 'Some OpenCode profile files failed to write');
+      }
+    }
 
-    // import the transcript into opencode
-    await this.sandbox.exec(['opencode', 'session', 'import', filePath]);
+    logger.info({ sessionId: args.sessionId }, 'Session initialization complete');
   }
 
   public async readSessionTranscript(): Promise<string | null> {

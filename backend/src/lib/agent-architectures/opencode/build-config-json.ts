@@ -9,14 +9,36 @@ type OpencodeMcpServerConfig = {
   enabled: boolean;
 };
 
-type OpencodeMcpJson = {
-  mcp: Record<string, OpencodeMcpServerConfig>;
+type OpencodeConfig = {
+  permission: {
+    bash: "allow" | "ask" | "deny";
+    edit: "allow" | "ask" | "deny";
+    external_directory: "allow" | "ask" | "deny";
+  };
+  plugin?: string[];
+  mcp?: Record<string, OpencodeMcpServerConfig>;
 };
 
-export const buildOpencodeConfigJson = (agentProfile: AgentProfile, baseMcpDir: string): OpencodeMcpJson => {
-  const mcp: Record<string, OpencodeMcpServerConfig> = {};
+export const buildConfigJson = (agentProfile: AgentProfile, baseMcpDir: string): OpencodeConfig => {
+  // Build permissions (non-interactive mode for sandbox execution)
+  const permission: OpencodeConfig["permission"] = {
+    bash: "allow",
+    edit: "allow",
+    external_directory: "deny",
+  };
 
-  if (agentProfile.bundledMCPs) {
+  // Build plugins array (include opencode-skills if skills are defined)
+  const plugins: string[] = [];
+  if (agentProfile.skills && agentProfile.skills.length > 0) {
+    plugins.push("opencode-skills");
+  }
+
+  // Build MCP server configuration
+  let mcp: Record<string, OpencodeMcpServerConfig> | undefined;
+
+  if (agentProfile.bundledMCPs && agentProfile.bundledMCPs.length > 0) {
+    mcp = {};
+
     for (const localmcp of agentProfile.bundledMCPs) {
       const serverProjectPath = path.join(baseMcpDir, normalizeString(localmcp.name));
 
@@ -40,5 +62,9 @@ export const buildOpencodeConfigJson = (agentProfile: AgentProfile, baseMcpDir: 
     }
   }
 
-  return { mcp };
+  return {
+    permission,
+    ...(plugins.length > 0 && { plugin: plugins }),
+    ...(mcp && { mcp }),
+  };
 };
