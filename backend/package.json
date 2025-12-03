@@ -46,7 +46,11 @@
   },
   "author": "Hunter Hopkins",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "prepublishOnly": "pnpm run build",
     "build": "tsc",
     "check-types": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -75,7 +79,6 @@
     "@typescript-eslint/eslint-plugin": "^6.7.0",
     "@typescript-eslint/parser": "^6.7.0",
     "eslint": "^8.49.0",
-    "tsdown": "^0.16.6",
     "tsx": "^4.19.2",
     "typescript": "^5.2.2"
   }

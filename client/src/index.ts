@@ -56,7 +56,7 @@ export type {
 
 // Types
 export type {
-  // Architecture & Session (new)
+  // Architecture & Session
   AGENT_ARCHITECTURE_TYPE,
   SessionListItem,
   SessionRuntimeState,
@@ -70,10 +70,6 @@ export type {
   AgentArchitectureSessionOptions,
   ClaudeSDKSessionOptions,
   OpenCodeSessionOptions,
-
-  // Architecture & Session (deprecated)
-  SessionStatus,
-  SessionListData,
 
   // Content Types
   TextContent,

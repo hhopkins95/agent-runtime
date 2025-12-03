@@ -1,7 +1,7 @@
 import type {
   PersistenceAdapter,
-  SessionListData,
-  SavedSessionData,
+  PersistedSessionListData,
+  PersistedSessionData,
   WorkspaceFile,
   AgentProfile,
   AgentProfileListData,
@@ -15,7 +15,7 @@ import type {
  * For production use, implement with a real database (PostgreSQL, MongoDB, Convex, etc.)
  */
 export class InMemoryPersistenceAdapter implements PersistenceAdapter {
-  private sessions = new Map<string, SessionListData>();
+  private sessions = new Map<string, PersistedSessionListData>();
   private transcripts = new Map<string, string>();
   private subagentTranscripts = new Map<string, Map<string, string>>();
   private workspaceFiles = new Map<string, Map<string, WorkspaceFile>>();
@@ -32,11 +32,11 @@ export class InMemoryPersistenceAdapter implements PersistenceAdapter {
   // Session Operations
   // ========================================
 
-  async listAllSessions(): Promise<SessionListData[]> {
+  async listAllSessions(): Promise<PersistedSessionListData[]> {
     return Array.from(this.sessions.values());
   }
 
-  async loadSession(sessionId: string): Promise<SavedSessionData | null> {
+  async loadSession(sessionId: string): Promise<PersistedSessionData | null> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return null;
@@ -65,13 +65,13 @@ export class InMemoryPersistenceAdapter implements PersistenceAdapter {
     };
   }
 
-  async createSessionRecord(session: SessionListData): Promise<void> {
+  async createSessionRecord(session: PersistedSessionListData): Promise<void> {
     this.sessions.set(session.sessionId, session);
   }
 
   async updateSessionRecord(
     sessionId: string,
-    updates: Partial<SessionListData>
+    updates: Partial<PersistedSessionListData>
   ): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (session) {

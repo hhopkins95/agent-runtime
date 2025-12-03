@@ -15,7 +15,10 @@
     "example:backend": "pnpm --filter @example/backend dev",
     "example:frontend": "pnpm --filter @example/frontend dev",
     "dev": "turbo run dev",
-    "docs": "npx @hhopkins/smart-docs ./docs"
+    "docs": "npx @hhopkins/smart-docs ./docs",
+    "publish:backend": "pnpm --filter @hhopkins/agent-runtime publish",
+    "publish:client": "pnpm --filter @hhopkins/agent-runtime-react publish",
+    "publish:all": "pnpm run publish:backend && pnpm run publish:client"
   },
   "workspaces": [
     "backend",

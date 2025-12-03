@@ -10,16 +10,13 @@
 // ============================================================================
 
 export type {
-  // Session types (new)
+  // Session types
   AGENT_ARCHITECTURE_TYPE,
   WorkspaceFile,
   RuntimeSessionData,
   SandboxStatus,
   SessionRuntimeState,
   SessionListItem,
-  // Session types (deprecated - use SessionListItem instead)
-  SessionStatus,
-  SessionListData,
   // Session options types
   AgentArchitectureSessionOptions,
   ClaudeSDKSessionOptions,
