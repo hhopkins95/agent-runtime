@@ -1,7 +1,8 @@
 {
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
-    "example-skills@anthropic-agent-skills": true,
-    "superpowers-lab@superpowers-marketplace": false
+    "example-skills@anthropic-agent-skills": false,
+    "superpowers-lab@superpowers-marketplace": false,
+    "superpowers-lab": false
   }
 }
