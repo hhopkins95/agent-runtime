@@ -1,6 +1,6 @@
 {
   "name": "@hhopkins/agent-runtime",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Node.js runtime for orchestrating AI agents (Claude, Gemini) in isolated Modal sandboxes",
   "type": "module",
   "main": "./dist/index.js",
@@ -37,12 +37,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/hhopkins/agent-service.git",
+    "url": "https://github.com/hhopkins95/agent-runtime.git",
     "directory": "backend"
   },
-  "homepage": "https://github.com/hhopkins/agent-service#readme",
+  "homepage": "https://github.com/hhopkins95/agent-runtime#readme",
   "bugs": {
-    "url": "https://github.com/hhopkins/agent-service/issues"
+    "url": "https://github.com/hhopkins95/agent-runtime/issues"
   },
   "author": "Hunter Hopkins",
   "license": "MIT",

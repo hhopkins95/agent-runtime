@@ -1,6 +1,6 @@
 {
   "name": "@hhopkins/agent-runtime-react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React hooks and client for interacting with agent-service",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,12 +18,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/hhopkins/agent-service.git",
+    "url": "https://github.com/hhopkins95/agent-runtime.git",
     "directory": "client"
   },
-  "homepage": "https://github.com/hhopkins/agent-service#readme",
+  "homepage": "https://github.com/hhopkins95/agent-runtime#readme",
   "bugs": {
-    "url": "https://github.com/hhopkins/agent-service/issues"
+    "url": "https://github.com/hhopkins95/agent-runtime/issues"
   },
   "author": "Hunter Hopkins",
   "license": "MIT",
