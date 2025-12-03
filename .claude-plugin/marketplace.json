@@ -12,10 +12,7 @@
       "name": "agent-service-skills",
       "description": "Skills and patterns for creating apps that use the agent service",
       "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/create-agent-service-app"
-      ]
+      "strict": false
     }
   ]
 }
