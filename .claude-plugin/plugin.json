@@ -1,9 +1,0 @@
-{
-  "name": "agent-runtime",
-  "version": "1.0.0",
-  "description": "Documentation and guidance for using the @hhopkins/agent-runtime monorepo - a platform for launching AI agents in isolated Modal sandboxes",
-  "author": {
-    "name": "Hunter Hopkins"
-  },
-  "keywords": ["agent", "runtime", "modal", "sandbox", "claude", "opencode", "react"]
-}

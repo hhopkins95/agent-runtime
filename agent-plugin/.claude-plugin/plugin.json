@@ -1,0 +1,5 @@
+{
+  "name": "agent-service",
+  "version": "1.0.0",
+  "description": "Skills and patterns for creating apps that use the agent service"
+}

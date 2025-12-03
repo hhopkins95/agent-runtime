@@ -1,5 +1,5 @@
 {
-  "name": "agent-service-skills",
+  "name": "hhopkins-agent-service",
   "owner": {
     "name": "Hunter Hopkins"
   },
@@ -9,10 +9,10 @@
   },
   "plugins": [
     {
-      "name": "agent-service-skills",
+      "name": "agent-service",
       "description": "Skills and patterns for creating apps that use the agent service",
-      "source": "./",
-      "strict": false
+      "source": "./agent-plugin"
     }
+
   ]
 }
